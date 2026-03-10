@@ -39,7 +39,7 @@ class StringWithVariables(Variable, VariableListener):
     def mk_uuid(message: str):
         return uuid.uuid3(namespace=StringWithVariables.MESSAGE_NS, name=str(message))
 
-    def __init__(self, owner, message: str, name: str | None = None, data_type: str = "string"):
+    def __init__(self, owner, message: str, name: str | None = None, data_type: str = "string", register_listeners: bool = True):
         self._inited = False
         if name is None:
             key = StringWithVariables.mk_uuid(message=str(message))
@@ -48,6 +48,7 @@ class StringWithVariables(Variable, VariableListener):
         VariableListener.__init__(self, name=name)
         self.owner = owner
         self.message = message if message is not None else ""
+        self._register_listeners = register_listeners
 
         # Used in formula
         self._tokens = {}  # "${path}": path
@@ -59,14 +60,13 @@ class StringWithVariables(Variable, VariableListener):
 
     def init(self):
         self._variables = self.get_variables()
-        if len(self._variables) > 0:
+        if self._register_listeners and len(self._variables) > 0:
             logger.debug(f"message {self.display_name}: using variables {', '.join(self._tokens.keys())}/{self._variables}")
             for varname in self._tokens.values():
                 if not Variable.is_state_variable(varname):
                     v = self.owner.get_variable(varname)
                     v.add_listener(self)
-            # owner get notified when this string changes
-        if isinstance(self.owner, VariableListener):
+        if self._register_listeners and isinstance(self.owner, VariableListener):
             self.add_listener(self.owner)
         # else:
         #     logger.debug(f"formula {self.display_name}: constant {self.message}")
@@ -343,10 +343,25 @@ class Formula(StringWithVariables):
     def mk_uuid(message: str):
         return uuid.uuid3(namespace=Formula.FORMULA_NS, name=str(message))
 
-    def __init__(self, owner, formula: str, data_type: str = "float", default_value=0.0, format_str: str | None = None):
+    def __init__(
+        self,
+        owner,
+        formula: str,
+        data_type: str = "float",
+        default_value=0.0,
+        format_str: str | None = None,
+        register_listeners: bool = True,
+    ):
         key = Formula.mk_uuid(message=str(formula))
         name = f"{owner.get_id()}|{key}"  # one owner may have several formulas like annunciators that can have up to 4
-        StringWithVariables.__init__(self, owner=owner, message=formula, data_type=data_type, name=name)
+        StringWithVariables.__init__(
+            self,
+            owner=owner,
+            message=formula,
+            data_type=data_type,
+            name=name,
+            register_listeners=register_listeners,
+        )
 
         self.default_value = default_value
         self.format_str = format_str
@@ -468,13 +483,13 @@ class TextWithVariables(StringWithVariables):
         self.bg_color = None
         self.bg_texture = None
 
-        # local formula?
+        message = config.get(prefix)
+        # local formula is only needed if this text actually references ${formula}
         self._formula = None
         formula = config.get(CONFIG_KW.FORMULA.value)
-        if formula is not None:
+        if formula is not None and isinstance(message, str) and f"${{{CONFIG_KW.FORMULA.value}}}" in message:
             self._formula = Formula(owner=owner, formula=formula)
 
-        message = config.get(prefix)
         StringWithVariables.__init__(self, owner=owner, message=message)  # will call init()
 
     def get_variables(self) -> set:

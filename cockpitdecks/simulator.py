@@ -6,6 +6,8 @@ import logging
 from datetime import datetime
 from typing import Any, List
 from abc import ABC, abstractmethod
+from collections import Counter
+from collections import deque
 
 from cockpitdecks import __version__
 from cockpitdecks.event import Event
@@ -18,6 +20,7 @@ from cockpitdecks.variable import (
     VariableFactory,
     VariableListener,
 )
+
 from cockpitdecks.instruction import InstructionFactory, Instruction, NoOperation, InstructionPerformer
 from cockpitdecks.activity import Activity, ActivityListener
 
@@ -61,6 +64,7 @@ class Simulator(ABC, InstructionFactory, InstructionPerformer, VariableFactory, 
         # Internal properties
         self.simulator_variable_to_monitor = {}  # simulator data and number of objects monitoring
         self.simulator_event_to_monitor = {}  # simulator event and number of objects monitoring
+        self._simulator_variable_monitor_reasons = {}
 
         self.cockpit.set_logging_level(__name__)
 
@@ -313,10 +317,12 @@ class Simulator(ABC, InstructionFactory, InstructionPerformer, VariableFactory, 
     def clean_simulator_variable_to_monitor(self):
         """Removes all data from Simulator monitoring."""
         self.simulator_variable_to_monitor = {}
+        self._simulator_variable_monitor_reasons = {}
 
     def add_simulator_variables_to_monitor(self, simulator_variables: dict, reason: str = None):
         """Adds supplied data to Simulator monitoring."""
         prnt = []
+        owner_reason = reason or "<no reason>"
         for d in simulator_variables.values():
             if Variable.is_internal_variable(d.name):
                 logger.debug(f"local simulator_variable {d.name} is not monitored")
@@ -326,21 +332,31 @@ class Simulator(ABC, InstructionFactory, InstructionPerformer, VariableFactory, 
                 prnt.append(d.name)
             else:
                 self.simulator_variable_to_monitor[d.name] = self.simulator_variable_to_monitor[d.name] + 1
+            owners = self._simulator_variable_monitor_reasons.setdefault(d.name, Counter())
+            owners[owner_reason] += 1
         logger.debug(f"added {prnt}")
         logger.debug(f"currently monitoring {self.simulator_variable_to_monitor}")
 
     def remove_simulator_variables_to_monitor(self, simulator_variables: dict, reason: str = None):
         """Removes supplied data from Simulator monitoring."""
         prnt = []
+        owner_reason = reason or "<no reason>"
         for d in simulator_variables.values():
             if Variable.is_internal_variable(d.name):
                 logger.debug(f"local simulator_variable {d.name} is not monitored")
                 continue
             if d.name in self.simulator_variable_to_monitor.keys():
                 self.simulator_variable_to_monitor[d.name] = self.simulator_variable_to_monitor[d.name] - 1
+                owners = self._simulator_variable_monitor_reasons.setdefault(d.name, Counter())
+                if owner_reason in owners:
+                    owners[owner_reason] -= 1
+                    if owners[owner_reason] <= 0:
+                        del owners[owner_reason]
                 if self.simulator_variable_to_monitor[d.name] == 0:
                     prnt.append(d.name)
                     del self.simulator_variable_to_monitor[d.name]
+                    if d.name in self._simulator_variable_monitor_reasons:
+                        del self._simulator_variable_monitor_reasons[d.name]
             else:
                 if not self._startup:
                     logger.warning(f"simulator_variable {d.name} not monitored")
@@ -586,6 +602,23 @@ class SimulatorEvent(Event):
 
     def enqueue(self):
         if self.sim is not None:
+            event_key = None
+            if hasattr(self, "dataref_path"):
+                event_key = ("dataref_path", getattr(self, "dataref_path", None))
+            elif hasattr(self, "name") and isinstance(getattr(self, "name", None), str) and "/" in self.name:
+                event_key = ("name", self.name)
+
+            if event_key is not None:
+                queue = self.sim.cockpit.event_queue
+                with queue.mutex:
+                    queue.queue = deque(
+                        item
+                        for item in queue.queue
+                        if not (
+                            hasattr(item, event_key[0])
+                            and getattr(item, event_key[0], None) == event_key[1]
+                        )
+                    )
             self.sim.cockpit.event_queue.put(self)
         else:
             logger.warning("no simulator")

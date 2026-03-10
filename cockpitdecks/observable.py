@@ -87,6 +87,7 @@ class Observable(ABC):
     """
 
     OBSERVABLE_NAME = "observable-base"
+    AUTO_REGISTER = True
 
     @classmethod
     def name(cls) -> str:
@@ -131,6 +132,10 @@ class Observable(ABC):
     def is_internal(name: None) -> bool:
         test = Observable.name() if name is None else name
         return test.endswith("base") or test.endswith("internal")
+
+    @classmethod
+    def should_auto_register(cls) -> bool:
+        return getattr(cls, "AUTO_REGISTER", True)
 
     @property
     def value(self):

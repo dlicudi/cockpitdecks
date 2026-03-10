@@ -175,7 +175,7 @@ class Page:
         self.button_names[button.name] = button
         logger.debug(f"page {self.name}: button {idx} {button.name} added")
 
-    def register_simulator_variable(self, button: Button):
+    def register_simulator_variable(self, button: Button, attach: bool = True):
         # String datarefs get created first but are NOT added to the list of simulator_variable for this page
         # since they are not collected by the Simulator UDP mechanism
         # Declared string dataref must be create FIRST so that they get the proper type.
@@ -187,7 +187,8 @@ class Page:
             if d not in self.simulator_variables:
                 ref = self.sim.get_variable(d)  # creates or return already defined dataref
                 if ref is not None:
-                    ref.add_listener(button)
+                    if attach:
+                        ref.add_listener(button)
                     if isinstance(ref, SimulatorVariable) and not Variable.is_internal_variable(d):
                         self.simulator_variables[d] = ref
                         self.inc(COCKPITDECKS_INTVAR.DATAREF_REGISTERED.value)
@@ -197,10 +198,19 @@ class Page:
                 else:
                     logger.error(f"page {self.name}: button {button.name}: failed to create dataref {d}")
             else:  # dataref already exists in list, just add this button as a listener
-                self.simulator_variables[d].add_listener(button)
+                if attach:
+                    self.simulator_variables[d].add_listener(button)
                 logger.debug(f"page {self.name}: button {button.name} registered for existing dataref {d}")
 
         logger.debug(f"page {self.name}: button {button.name} datarefs registered")
+
+    def attach_simulator_variable_listeners(self):
+        for button in self.buttons.values():
+            for d in button.get_variables():
+                ref = self.simulator_variables.get(d)
+                if ref is not None:
+                    ref.add_listener(button)
+        logger.debug(f"page {self.name}: simulator variable listeners attached")
 
     def unregister_simulator_variable(self, button: Button):
         for d in button.get_variables():
@@ -209,6 +219,11 @@ class Page:
                 ref.remove_listener(button)
 
         logger.debug(f"page {self.name}: button {button.name} unregistered")
+
+    def detach_simulator_variable_listeners(self):
+        for button in self.buttons.values():
+            self.unregister_simulator_variable(button)
+        logger.debug(f"page {self.name}: simulator variable listeners detached")
 
     def find_button(self, button_def):
         btns = list(filter(lambda b: b._def == button_def, self.buttons.values()))

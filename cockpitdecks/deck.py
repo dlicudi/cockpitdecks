@@ -390,6 +390,8 @@ class Deck(ABC):
                 self.cockpit.sim.remove_simulator_variables_to_monitor(
                     simulator_variables=self.current_page.simulator_variables, reason=f"deck {self.name}, page {self.current_page.name}"
                 )
+                logger.debug("..detaching simulator variable listeners..")
+                self.current_page.detach_simulator_variable_listeners()
                 logger.debug("..cleaning page..")
                 self.current_page.clean()
                 logger.debug(f"..reset device {self.name}..")
@@ -403,6 +405,8 @@ class Deck(ABC):
             self.cockpit.sim.add_simulator_variables_to_monitor(
                 simulator_variables=self.current_page.simulator_variables, reason=f"deck {self.name}, page {self.current_page.name}"
             )  # set simulator variables to monitor
+            logger.debug("..attaching simulator variable listeners..")
+            self.current_page.attach_simulator_variable_listeners()
             logger.debug("..rendering page..")
             self.current_page.render()
             logger.debug(f"deck {self.name} ..done")

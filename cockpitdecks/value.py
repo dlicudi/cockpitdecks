@@ -150,7 +150,7 @@ class Value(StringWithVariables):
         # 1. Formula
         formula_str = base.get(CONFIG_KW.FORMULA.value)
         if formula_str is not None and formula_str != "":
-            formula = Formula(owner=self._provider, formula=formula_str)
+            formula = Formula(owner=self._provider, formula=formula_str, register_listeners=False)
             r = formula.get_variables()
             logger.debug(f"value {self.name}: added formula variables {r}")
 

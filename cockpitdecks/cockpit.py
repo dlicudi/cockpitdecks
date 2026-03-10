@@ -1354,7 +1354,11 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
         # Permament observables are observables coded as subclass of Observable.
         # They take no configuration to start, they are self contained.
         # If it exposes a variable, the variable can be used in other Observables to trigger actions/instructions.
-        self._permanent_observables = {s.name(): s for s in Cockpit.all_subclasses(Observable) if not Observable.is_internal(s.name())}
+        self._permanent_observables = {
+            s.name(): s
+            for s in Cockpit.all_subclasses(Observable)
+            if not Observable.is_internal(s.name()) and s.should_auto_register()
+        }
         if len(self._permanent_observables) > 0:
             logger.info(f"loaded {len(self._permanent_observables)} permanent observables: {', '.join(sorted(self._permanent_observables.keys()))}")
         else:

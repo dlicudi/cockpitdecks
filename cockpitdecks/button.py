@@ -7,7 +7,6 @@ Maintain a "value", and some internal attributes.
 """
 
 from __future__ import annotations
-
 import re
 import logging
 import sys
@@ -19,7 +18,7 @@ from .buttons.activation import ACTIVATION_VALUE, ActivationValueProvider
 from .buttons.representation import Annunciator
 from .variable import Variable, ValueProvider, InternalVariable, VariableListener, InternalVariableType
 from .simulator import SimulatorVariable, SimulatorVariableValueProvider
-from .strvar import StringWithVariables
+from .strvar import Formula, StringWithVariables
 from .value import Value
 from .instruction import Instruction
 
@@ -35,7 +34,6 @@ from cockpitdecks import (
 logger = logging.getLogger(__name__)
 # logger.setLevel(SPAM_LEVEL)
 # logger.setLevel(logging.DEBUG)
-
 
 class CockpitdecksError(Exception):
     pass
@@ -166,7 +164,7 @@ class Button(VariableListener, SimulatorVariableValueProvider, StateVariableValu
         self.all_datarefs = None  # all datarefs used by this button
         self.all_datarefs = self.get_variables()  # this does not contain string datarefs
         if len(self.all_datarefs) > 0:
-            self.page.register_simulator_variable(self)  # when the button's page is loaded, we monitor these datarefs
+            self.page.register_simulator_variable(self, attach=False)  # page activation decides when listeners are attached
             # string-datarefs are not monitored by the page, they get sent by the XPPython3 plugin
         # add string datarefs to all_datarefs after their registration at the page level
         self.all_datarefs = self.all_datarefs
@@ -218,6 +216,21 @@ class Button(VariableListener, SimulatorVariableValueProvider, StateVariableValu
         if self.page.deck.cockpit.sim is None:
             raise CockpitdecksError("simulator no longer accessible")
         return self.page.deck.cockpit.sim
+
+    def execute_formula(self, formula: str, default_value=0.0, format_str: str | None = None):
+        """Compatibility helper used by extension renderers.
+
+        Evaluate a formula against the button's current variable state without
+        storing the result or triggering variable notifications during render.
+        """
+        formula_value = Formula(
+            owner=self,
+            formula=formula,
+            default_value=default_value,
+            format_str=format_str,
+            register_listeners=False,
+        )
+        return formula_value.execute_formula(store=False, cascade=False)
 
     def get_id(self):
         return ID_SEP.join([self.page.get_id(), str(self.index)])
