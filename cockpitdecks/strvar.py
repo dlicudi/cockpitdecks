@@ -310,7 +310,11 @@ class StringWithVariables(Variable, VariableListener):
                         logger.debug(f"variable {self.display_name}: formatted {local_format}:  {value_str}")
                         value = value_str
                     else:
-                        logger.warning(f"variable {self.display_name}: has format string '{local_format}' but value is not a number '{value}'")
+                        # The display placeholder (typically "---") is expected on
+                        # first render or when a simulator value is unavailable.
+                        # Keep the placeholder without spamming warnings.
+                        if value not in [default, "---", ""]:
+                            logger.warning(f"variable {self.display_name}: has format string '{local_format}' but value is not a number '{value}'")
 
             logger.debug(f"{self.owner} ({type(self.owner)}): {varname}: value {value}")
             # print("BEFORE", text, token, str(value))
