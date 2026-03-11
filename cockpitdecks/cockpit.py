@@ -2042,12 +2042,6 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
         while self.event_loop_run:
             e = self.event_queue.get()  # blocks infinitely here
             queue_depth = self.event_queue.qsize()
-            if queue_depth > self._event_loop_peak_queue:
-                self._event_loop_peak_queue = queue_depth
-                logger.info(f"event loop queue peak: {queue_depth}")
-
-            event_name = e if type(e) is str else type(e).__name__
-            started_at = time.perf_counter()
 
             if type(e) is str:
                 if e == "terminate":
@@ -2075,24 +2069,6 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
                     logger.warning("..done with error", exc_info=True)
 
             self.flush_dirty_buttons()
-
-            duration_ms = (time.perf_counter() - started_at) * 1000
-            self._event_loop_events_since_report = self._event_loop_events_since_report + 1
-            self._event_loop_total_duration_ms = self._event_loop_total_duration_ms + duration_ms
-            self._event_loop_max_duration_ms = max(self._event_loop_max_duration_ms, duration_ms)
-
-            if duration_ms >= self._event_loop_slow_event_ms:
-                logger.info(f"event loop slow event: {event_name} took {duration_ms:.1f}ms (queue={queue_depth})")
-
-            if self._event_loop_events_since_report >= self._event_loop_report_interval:
-                avg_duration_ms = self._event_loop_total_duration_ms / self._event_loop_events_since_report
-                logger.info(
-                    f"event loop stats: events={self._event_loop_events_since_report}, avg={avg_duration_ms:.1f}ms, "
-                    f"max={self._event_loop_max_duration_ms:.1f}ms, queue={queue_depth}, peak={self._event_loop_peak_queue}"
-                )
-                self._event_loop_events_since_report = 0
-                self._event_loop_total_duration_ms = 0.0
-                self._event_loop_max_duration_ms = 0.0
 
         logger.debug(".. event loop ended")
 

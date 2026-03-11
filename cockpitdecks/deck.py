@@ -86,31 +86,13 @@ class Deck(ABC):
         Load deck type definition, load deck parameters, load layout, pages,
         and install and start deck software.
         """
-        init_started_at = time.perf_counter()
-
-        def log_stage(stage: str, stage_started_at: float):
-            logger.info(f"deck {self.name}: init stage {stage} took {(time.perf_counter() - stage_started_at) * 1000.0:.1f}ms")
-
         if not self.valid:
             logger.warning(f"deck {self.name}: is invalid")
             return
-
-        stage_started_at = time.perf_counter()
         self.set_deck_type()
-        log_stage("set_deck_type", stage_started_at)
-
-        stage_started_at = time.perf_counter()
         self.set_brightness(self.brightness)
-        log_stage("set_brightness", stage_started_at)
-
-        stage_started_at = time.perf_counter()
         self.load()  # will load default page if no page found
-        log_stage("load", stage_started_at)
-
-        stage_started_at = time.perf_counter()
         self.start()  # Some system may need to start before we can load a page
-        log_stage("start", stage_started_at)
-        logger.info(f"deck {self.name}: init total took {(time.perf_counter() - init_started_at) * 1000.0:.1f}ms")
 
     def get_id(self) -> str:
         """Returns deck identifier
@@ -379,8 +361,6 @@ class Deck(ABC):
 
             if verbose:
                 logger.info(f"deck {self.name}: page {page_name} loaded (from file {display_fn}), contains {len(this_page.buttons)} buttons")
-            logger.info(f"deck {self.name}: page {page_name} load total took {(time.perf_counter() - page_started_at) * 1000.0:.1f}ms")
-
         if not len(self.pages) > 0:
             self.valid = False
             logger.error(f"{self.name}: has no page, ignoring")
@@ -388,8 +368,6 @@ class Deck(ABC):
         else:
             self.set_home_page()
             logger.info(f"deck {self.name}: loaded {len(self.pages)} pages from layout {self.layout}: {', '.join(self.pages.keys())}.")
-        logger.info(f"deck {self.name}: load total took {(time.perf_counter() - load_started_at) * 1000.0:.1f}ms")
-
     def change_page(self, page: str | None = None) -> str | None:
         """Change the deck's page to the one supplied as argument.
            If none supplied, load the default page.

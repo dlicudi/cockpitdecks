@@ -360,18 +360,10 @@ class Button(VariableListener, SimulatorVariableValueProvider, StateVariableValu
         """
         Install button
         """
-        init_started_at = time.perf_counter()
-        compute_value_duration_ms = 0.0
         if self._first_value_not_saved and self.initial_value is not None:
             logger.debug(f"button {self.name} .. from initial-value")
             self.value = self.initial_value
             logger.debug(f"button {self.name}: ..has value {self.current_value}.")
-        init_duration_ms = (time.perf_counter() - init_started_at) * 1000.0
-        if init_duration_ms >= 100.0:
-            logger.info(
-                f"button {self.name} ({self.index}) init() took {init_duration_ms:.1f}ms on page {self.page.name} "
-                f"[compute_value={compute_value_duration_ms:.1f}ms]"
-            )
 
     def ensure_initialized(self):
         if not self._first_value_not_saved:
@@ -828,7 +820,6 @@ class Button(VariableListener, SimulatorVariableValueProvider, StateVariableValu
             if self.on_current_page() and not self.mosaic and not self._part_of_multi:
                 # Mosaic and buttons parts of a multi-buttons cannot take the initiative to render themselves.
                 # Instruction to render has to come from "parent" button.
-                started = time.perf_counter()
                 try:
                     self._last_render_at = time.monotonic()
                     self.deck.render(self)
@@ -836,14 +827,6 @@ class Button(VariableListener, SimulatorVariableValueProvider, StateVariableValu
                 except:
                     logger.warning(f"button {self.name}: problem during rendering", exc_info=True)
                     return
-                duration_ms = (time.perf_counter() - started) * 1000.0
-                if duration_ms >= 50.0:
-                    page_name = self.page.name if self.page is not None else "?"
-                    rep_name = type(self._representation).__name__ if self._representation is not None else "None"
-                    logger.info(
-                        f"button {self.name}: live render took {duration_ms:.1f}ms on page {page_name} "
-                        f"({rep_name})"
-                    )
                 # self.inc(COCKPITDECKS_INTVAR.BUTTON_RENDERS.value, cascade=False)
                 logger.debug(f"button {self.name} rendered")
             else:

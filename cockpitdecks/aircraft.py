@@ -662,11 +662,6 @@ class Aircraft:
         Loads decks for aircraft in supplied path.
         First unloads a previously loaded aircraft if any
         """
-        start_started_at = time.perf_counter()
-
-        def log_stage(stage: str, stage_started_at: float):
-            logger.info(f"aircraft.start stage {stage} took {(time.perf_counter() - stage_started_at) * 1000.0:.1f}ms")
-
         if acpath is None:
             logger.warning("no new aircraft path to load, not unloading current one")
             return
@@ -696,29 +691,19 @@ class Aircraft:
             self._name = Aircraft.get_aircraft_name_from_aircraft_path(acpath)
             logger.info(f"aircraft name set to {self._name}")
 
-            stage_started_at = time.perf_counter()
             self.load_deck_types()
-            log_stage("load_deck_types", stage_started_at)
 
-            stage_started_at = time.perf_counter()
             self.scan_web_decks()
-            log_stage("scan_web_decks", stage_started_at)
 
             if len(self.devices) == 0:
                 logger.warning("no device")
                 return
 
-            stage_started_at = time.perf_counter()
             self.load_resources()
-            log_stage("load_resources", stage_started_at)
 
-            stage_started_at = time.perf_counter()
             self.create_decks()
-            log_stage("create_decks", stage_started_at)
 
-            stage_started_at = time.perf_counter()
             self.load_pages()
-            log_stage("load_pages", stage_started_at)
             self._running = True
         else:
             if acpath is None:
@@ -728,7 +713,6 @@ class Aircraft:
             else:
                 logger.error(f"no Cockpitdecks folder '{CONFIG_FOLDER}' in aircraft folder {acpath}")
             self.create_default_decks()
-        logger.info(f"aircraft.start total took {(time.perf_counter() - start_started_at) * 1000.0:.1f}ms")
         logger.info(f"..aircraft {os.path.basename(acpath)} started")
 
     def terminate(self):

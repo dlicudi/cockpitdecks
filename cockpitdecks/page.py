@@ -246,16 +246,8 @@ class Page:
         """
         render_started_at = time.perf_counter()
         for button in self.buttons.values():
-            button_started_at = time.perf_counter()
             button.render()
-            button_duration_ms = (time.perf_counter() - button_started_at) * 1000
-            if button_duration_ms >= 50.0:
-                logger.info(f"page {self.name}: slow button render {button.name} took {button_duration_ms:.1f}ms")
             logger.debug(f"page {self.name}: button {button.name} rendered")
-
-        page_render_duration_ms = (time.perf_counter() - render_started_at) * 1000
-        if page_render_duration_ms >= 100.0:
-            logger.info(f"page {self.name}: render took {page_render_duration_ms:.1f}ms for {len(self.buttons)} buttons")
 
         self.inc(COCKPITDECKS_INTVAR.PAGE_RENDER.value)
 

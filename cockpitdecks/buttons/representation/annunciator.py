@@ -329,12 +329,6 @@ class AnnunciatorPart:
                     logger.debug(f"button {self.annunciator.button.name}: part {self.name}: not lit (type vivisun)")
                 draw_duration_ms = 0.0
                 frame_duration_ms = 0.0
-            total_duration_ms = (time.perf_counter() - started_at) * 1000.0
-            if total_duration_ms >= 100.0:
-                logger.info(
-                    f"button {self.annunciator.button.name}: part {self.name} render took {total_duration_ms:.1f}ms "
-                    f"[text={text_duration_ms:.1f}ms, font={font_duration_ms:.1f}ms, draw={draw_duration_ms:.1f}ms, frame={frame_duration_ms:.1f}ms]"
-                )
             return
 
         led = state["led"]
@@ -401,10 +395,6 @@ class AnnunciatorPart:
                 draw.polygon(triangle, outline=color, width=STROKE_THICK)
             else:
                 logger.warning(f"button {self.annunciator.button.name}: part {self.name}: invalid led {led}")
-        total_duration_ms = (time.perf_counter() - started_at) * 1000.0
-        if total_duration_ms >= 100.0:
-            logger.info(f"button {self.annunciator.button.name}: part {self.name} render took {total_duration_ms:.1f}ms [led={led}]")
-
 
 class Annunciator(DrawBase):
 
@@ -780,13 +770,6 @@ class Annunciator(DrawBase):
 
         # PART 5: Label
         # Label will be added in Icon.get_image()
-        total_duration_ms = (time.perf_counter() - total_started_at) * 1000.0
-        if total_duration_ms >= 100.0:
-            logger.info(
-                f"button {self.button.name}: annunciator image build took {total_duration_ms:.1f}ms "
-                f"[parts={parts_duration_ms:.1f}ms, blur={blur_duration_ms:.1f}ms, composite={composite_duration_ms:.1f}ms, "
-                f"background={background_duration_ms:.1f}ms, guard={guard_duration_ms:.1f}ms]"
-            )
         return image
 
     def all_lit(self, on: bool):
