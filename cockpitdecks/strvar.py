@@ -622,7 +622,7 @@ class TextWithVariables(StringWithVariables):
         logger.debug(f"variable {self.display_name}: no local formula")
         return super().get_formula_result(default=default)
 
-    def get_text(self, default: str = "---"):
+    def get_text(self, default: str = "---", formula_result=None):
         text = self.message
 
         # 1. Static icon font like ${fa:airplane}, font=fontawesome.otf
@@ -637,7 +637,7 @@ class TextWithVariables(StringWithVariables):
         # If text contains ${formula}, it is replaced by the value of the formula calculation (with formatting is present)
         KW_FORMULA_STR = f"${{{CONFIG_KW.FORMULA.value}}}"  # "${formula}"
         if KW_FORMULA_STR in str(text):
-            res = self.get_formula_result()
+            res = formula_result if formula_result is not None else self.get_formula_result()
             local_format = self.get_variable_format(variable=CONFIG_KW.FORMULA.value, default=self.format)
             if local_format is not None:
                 restmp = float(res)

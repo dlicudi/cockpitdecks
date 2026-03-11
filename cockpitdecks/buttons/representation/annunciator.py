@@ -146,8 +146,8 @@ class AnnunciatorPart:
         # Compare the visible state, not the raw formula values. This avoids
         # rerendering when upstream values jitter but the displayed output stays
         # identical after formatting.
-        self.value
-        text = self._display.get_text()
+        value = self.value
+        text = self._display.get_text(formula_result=value)
         return {
             "text": text,
             "lit": self.is_lit,

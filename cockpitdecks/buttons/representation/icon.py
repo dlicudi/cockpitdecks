@@ -497,7 +497,14 @@ class MultiTexts(IconText):
         multi_texts = self._config.get("multi-texts", [])
         self._multi_texts = []
         for text in multi_texts:
-            self._multi_texts.append(TextWithVariables(owner=button, config=text, prefix=CONFIG_KW.TEXT.value))
+            self._multi_texts.append(
+                TextWithVariables(
+                    owner=button,
+                    config=text,
+                    prefix=CONFIG_KW.TEXT.value,
+                    register_listeners=False,
+                )
+            )
 
     @property
     def num_texts(self):
