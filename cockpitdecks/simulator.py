@@ -111,6 +111,21 @@ class Simulator(ABC, InstructionFactory, InstructionPerformer, VariableFactory, 
                 return rnd
         return None
 
+    def get_frequency(self, simulator_variable_name: str) -> float | None:
+        freq = self.frequencies.get(simulator_variable_name)
+        if freq is not None:
+            return freq
+        if "[" in simulator_variable_name:
+            root_name = simulator_variable_name[: simulator_variable_name.find("[")]
+            freq = self.frequencies.get(root_name)
+            if freq is not None:
+                return freq
+            root_name = root_name + "[*]"
+            freq = self.frequencies.get(root_name)
+            if freq is not None:
+                return freq
+        return None
+
     def set_rounding(self, simulator_variable: SimulatorVariable):
         if simulator_variable.name.find("[") > 0:
             rnd = self.roundings.get(simulator_variable.name)

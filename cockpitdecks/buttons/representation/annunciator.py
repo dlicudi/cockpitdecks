@@ -135,6 +135,21 @@ class AnnunciatorPart:
         # print("PART", self.annunciator.button.name, self.name, r, self.lit, self._value.name, self._value.formula, self._value)
         return r
 
+    def get_render_state(self):
+        # Compare the visible state, not the raw formula values. This avoids
+        # rerendering when upstream values jitter but the displayed output stays
+        # identical after formatting.
+        self.value
+        text = self._display.get_text()
+        return {
+            "text": text,
+            "lit": self.is_lit,
+            "led": self.get_led(),
+            "color": self.get_color(),
+            "framed": self.has_frame(),
+            "invert": self.is_invert(),
+        }
+
     @property
     def is_lit(self):
         return self.lit
@@ -553,10 +568,9 @@ class Annunciator(DrawBase):
         """
         There is a get_current_value value per annunciator part.
         """
-        v = {k: v.value for k, v in self.annunciator_parts.items()}
-        l = {k: v.is_lit for k, v in self.annunciator_parts.items()}
-        logger.debug(f"button {self.button.name}: {type(self).__name__}: {v} => {l}")
-        return v
+        states = {k: v.get_render_state() for k, v in self.annunciator_parts.items()}
+        logger.debug(f"button {self.button.name}: {type(self).__name__}: {states}")
+        return states
 
     def get_annunciator_background(self, width: int, height: int, use_texture: bool = True):
         """

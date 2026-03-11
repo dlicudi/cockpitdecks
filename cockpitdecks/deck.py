@@ -2,6 +2,7 @@
 #
 import os
 import logging
+import time
 
 from typing import Dict, List, Any
 from abc import ABC, abstractmethod
@@ -85,13 +86,31 @@ class Deck(ABC):
         Load deck type definition, load deck parameters, load layout, pages,
         and install and start deck software.
         """
+        init_started_at = time.perf_counter()
+
+        def log_stage(stage: str, stage_started_at: float):
+            logger.info(f"deck {self.name}: init stage {stage} took {(time.perf_counter() - stage_started_at) * 1000.0:.1f}ms")
+
         if not self.valid:
             logger.warning(f"deck {self.name}: is invalid")
             return
+
+        stage_started_at = time.perf_counter()
         self.set_deck_type()
+        log_stage("set_deck_type", stage_started_at)
+
+        stage_started_at = time.perf_counter()
         self.set_brightness(self.brightness)
+        log_stage("set_brightness", stage_started_at)
+
+        stage_started_at = time.perf_counter()
         self.load()  # will load default page if no page found
+        log_stage("load", stage_started_at)
+
+        stage_started_at = time.perf_counter()
         self.start()  # Some system may need to start before we can load a page
+        log_stage("start", stage_started_at)
+        logger.info(f"deck {self.name}: init total took {(time.perf_counter() - init_started_at) * 1000.0:.1f}ms")
 
     def get_id(self) -> str:
         """Returns deck identifier
@@ -236,6 +255,7 @@ class Deck(ABC):
         static page with one activatio.
 
         """
+        load_started_at = time.perf_counter()
         verbose = True
 
         if self.layout is None:
@@ -259,6 +279,7 @@ class Deck(ABC):
                 self.wallpaper = self.get_attribute("wallpaper", self.wallpaper)
 
         for p in pages:
+            page_started_at = time.perf_counter()
             if p == CONFIG_FILE:
                 continue
             elif not (p.lower().endswith(".yaml") or p.lower().endswith(".yml")):  # not a yaml file
@@ -309,7 +330,9 @@ class Deck(ABC):
             self.pages[page_name] = this_page
 
             # Page buttons
+            base_buttons_started_at = time.perf_counter()
             this_page.load_buttons(buttons=page_config[CONFIG_KW.BUTTONS.value], deck_type=self.deck_type)
+            logger.info(f"deck {self.name}: page {page_name} base buttons took {(time.perf_counter() - base_buttons_started_at) * 1000.0:.1f}ms")
 
             # Page includes
             if CONFIG_KW.INCLUDES.value in page_config:
@@ -319,6 +342,7 @@ class Deck(ABC):
                 logger.debug(f"deck {self.name}: page {page_name} includes {includes}..")
                 ipb = 0
                 for inc in includes:
+                    include_started_at = time.perf_counter()
                     if inc.endswith(".inc") or "." not in inc:  # no extension
                         fni = os.path.join(dn, inc + ".yaml")
                     # if not os.path.exists(fni):
@@ -339,6 +363,10 @@ class Deck(ABC):
                             this_page.load_buttons(buttons=inc_config[CONFIG_KW.BUTTONS.value], deck_type=self.deck_type)
                             ipb = len(this_page.buttons) - before
                         del inc_config.store[CONFIG_KW.BUTTONS.value]
+                        logger.info(
+                            f"deck {self.name}: page {page_name} include {inc} took "
+                            f"{(time.perf_counter() - include_started_at) * 1000.0:.1f}ms"
+                        )
                     else:
                         logger.warning(f"includes: {inc}: file {fni} is invalid")
                 display_fni = fni.replace(
@@ -351,6 +379,7 @@ class Deck(ABC):
 
             if verbose:
                 logger.info(f"deck {self.name}: page {page_name} loaded (from file {display_fn}), contains {len(this_page.buttons)} buttons")
+            logger.info(f"deck {self.name}: page {page_name} load total took {(time.perf_counter() - page_started_at) * 1000.0:.1f}ms")
 
         if not len(self.pages) > 0:
             self.valid = False
@@ -359,6 +388,7 @@ class Deck(ABC):
         else:
             self.set_home_page()
             logger.info(f"deck {self.name}: loaded {len(self.pages)} pages from layout {self.layout}: {', '.join(self.pages.keys())}.")
+        logger.info(f"deck {self.name}: load total took {(time.perf_counter() - load_started_at) * 1000.0:.1f}ms")
 
     def change_page(self, page: str | None = None) -> str | None:
         """Change the deck's page to the one supplied as argument.
@@ -408,7 +438,11 @@ class Deck(ABC):
             logger.debug("..attaching simulator variable listeners..")
             self.current_page.attach_simulator_variable_listeners()
             logger.debug("..rendering page..")
+            render_started_at = time.perf_counter()
             self.current_page.render()
+            render_duration_ms = (time.perf_counter() - render_started_at) * 1000
+            if render_duration_ms >= 100.0:
+                logger.info(f"deck {self.name}: page {page} render stage took {render_duration_ms:.1f}ms")
             logger.debug(f"deck {self.name} ..done")
             logger.info(f"deck {self.name} changed page to {page}")
             return self.current_page.name

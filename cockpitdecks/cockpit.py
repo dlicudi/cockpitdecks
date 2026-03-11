@@ -12,6 +12,7 @@ import pickle
 import json
 import itertools
 import re
+import time
 
 from queue import Queue
 from typing import Dict, Tuple, Set
@@ -607,6 +608,19 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
         self.event_loop_run = False
         self.event_loop_thread = None
         self.event_queue = Queue()
+        self._event_loop_peak_queue = 0
+        self._dirty_buttons = {}
+        self._dirty_buttons_lock = threading.Lock()
+        self._dirty_flush_timer = None
+        self._dirty_flush_due_at = None
+        self._event_loop_report_interval = 500
+        self._event_loop_slow_event_ms = 50.0
+        self._event_loop_events_since_report = 0
+        self._event_loop_total_duration_ms = 0.0
+        self._event_loop_max_duration_ms = 0.0
+        self._aircraft_change_lock = threading.Lock()
+        self._aircraft_change_thread = None
+        self._pending_aircraft_change = None
 
         # Simulator
         self._simulator_name = environ.get(ENVIRON_KW.SIMULATOR_NAME.value)
@@ -1846,15 +1860,42 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
         liveryvalue = self.get_variable_value(name=Variable.internal_variable_name(LIVERY_CHANGE_MONITORING))
         if liveryvalue is None or type(liveryvalue) is not str:
             logger.warning(f"{LIVERY_CHANGE_MONITORING} has invalid value {liveryvalue}, ignoring livery change")
-        else:
-            logger.info(f"new livery path {liveryvalue}")
-            self.aircraft.change_livery(path=value)  # changing the livery now will not change is aircraft is changed (to do!)
+        self.schedule_aircraft_change(acname=acname, acpath=acpath, liverypath=liveryvalue if type(liveryvalue) is str else None)
 
-        logger.info(f"aircraft changed to {acname}, {acpath}, starting..")
-        with self.reload_operation:
-            self.aircraft.start(acpath=acpath)
-            self.sim.aircraft_changed()
-        logger.info("..started")
+    def schedule_aircraft_change(self, acname: str, acpath: str, liverypath: str | None = None):
+        with self._aircraft_change_lock:
+            self._pending_aircraft_change = (acname, acpath, liverypath)
+            if self._aircraft_change_thread is not None and self._aircraft_change_thread.is_alive():
+                logger.info(f"aircraft change to {acname} queued")
+                return
+
+            self._aircraft_change_thread = threading.Thread(
+                target=self._aircraft_change_worker,
+                name="Cockpit::Aircraft Loader",
+                daemon=True,
+            )
+            self._aircraft_change_thread.start()
+
+    def _aircraft_change_worker(self):
+        while True:
+            with self._aircraft_change_lock:
+                pending = self._pending_aircraft_change
+                self._pending_aircraft_change = None
+                if pending is None:
+                    self._aircraft_change_thread = None
+                    return
+
+            acname, acpath, liverypath = pending
+
+            if liverypath is not None:
+                logger.info(f"new livery path {liverypath}")
+                self.aircraft.change_livery(path=liverypath)
+
+            logger.info(f"aircraft changed to {acname}, {acpath}, starting asynchronously..")
+            with self.reload_operation:
+                self.aircraft.start(acpath=acpath)
+                self.sim.aircraft_changed()
+            logger.info("..started")
 
     def load_pages(self):
         if self.default_pages is not None:
@@ -1997,10 +2038,16 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
 
     def event_loop(self):
         logger.debug("starting event loop..")
-        last_ts = 0
 
         while self.event_loop_run:
             e = self.event_queue.get()  # blocks infinitely here
+            queue_depth = self.event_queue.qsize()
+            if queue_depth > self._event_loop_peak_queue:
+                self._event_loop_peak_queue = queue_depth
+                logger.info(f"event loop queue peak: {queue_depth}")
+
+            event_name = e if type(e) is str else type(e).__name__
+            started_at = time.perf_counter()
 
             if type(e) is str:
                 if e == "terminate":
@@ -2012,21 +2059,107 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
                     self.reload_deck(deck, just_do_it=True)
                 elif e == "stop":
                     self.stop_decks(just_do_it=True)
+                elif e == "flush-dirty":
+                    logger.debug("flush dirty requested")
                 self.inc("event_count_" + e)
-                continue
+            else:
+                try:
+                    logger.debug(f"doing {e}..")
+                    self.inc("event_count_" + type(e).__name__)
+                    if EVENTLOGFILE is not None and (LOG_SIMULATOR_VARIABLE_EVENTS or not isinstance(e, SimulatorEvent)) and not e.is_replay():
+                        # we do not enqueue events that are replayed
+                        event_logger.info(e.to_json())
+                    e.run(just_do_it=True)
+                    logger.debug("..done without error")
+                except:
+                    logger.warning("..done with error", exc_info=True)
 
-            try:
-                logger.debug(f"doing {e}..")
-                self.inc("event_count_" + type(e).__name__)
-                if EVENTLOGFILE is not None and (LOG_SIMULATOR_VARIABLE_EVENTS or not isinstance(e, SimulatorEvent)) and not e.is_replay():
-                    # we do not enqueue events that are replayed
-                    event_logger.info(e.to_json())
-                e.run(just_do_it=True)
-                logger.debug("..done without error")
-            except:
-                logger.warning("..done with error", exc_info=True)
+            self.flush_dirty_buttons()
+
+            duration_ms = (time.perf_counter() - started_at) * 1000
+            self._event_loop_events_since_report = self._event_loop_events_since_report + 1
+            self._event_loop_total_duration_ms = self._event_loop_total_duration_ms + duration_ms
+            self._event_loop_max_duration_ms = max(self._event_loop_max_duration_ms, duration_ms)
+
+            if duration_ms >= self._event_loop_slow_event_ms:
+                logger.info(f"event loop slow event: {event_name} took {duration_ms:.1f}ms (queue={queue_depth})")
+
+            if self._event_loop_events_since_report >= self._event_loop_report_interval:
+                avg_duration_ms = self._event_loop_total_duration_ms / self._event_loop_events_since_report
+                logger.info(
+                    f"event loop stats: events={self._event_loop_events_since_report}, avg={avg_duration_ms:.1f}ms, "
+                    f"max={self._event_loop_max_duration_ms:.1f}ms, queue={queue_depth}, peak={self._event_loop_peak_queue}"
+                )
+                self._event_loop_events_since_report = 0
+                self._event_loop_total_duration_ms = 0.0
+                self._event_loop_max_duration_ms = 0.0
 
         logger.debug(".. event loop ended")
+
+    def mark_button_dirty(self, button):
+        with self._dirty_buttons_lock:
+            self._dirty_buttons[button.get_id()] = button
+        self._schedule_dirty_flush_if_needed()
+
+    def flush_dirty_buttons(self):
+        with self._dirty_buttons_lock:
+            if not self._dirty_buttons:
+                return
+            now = time.monotonic()
+            dirty_buttons = []
+            next_due_at = None
+            for button_id, button in list(self._dirty_buttons.items()):
+                due_at = button.next_render_due_at()
+                if due_at <= now:
+                    dirty_buttons.append(button)
+                    del self._dirty_buttons[button_id]
+                else:
+                    next_due_at = due_at if next_due_at is None else min(next_due_at, due_at)
+
+        if not dirty_buttons:
+            if next_due_at is not None:
+                self._schedule_dirty_flush(delay_s=max(0.0, next_due_at - time.monotonic()))
+            return
+
+        for button in dirty_buttons:
+            try:
+                button.render()
+            except:
+                logger.warning(f"button {button.name}: problem during deferred rendering", exc_info=True)
+
+        self._schedule_dirty_flush_if_needed()
+
+    def _schedule_dirty_flush_if_needed(self):
+        with self._dirty_buttons_lock:
+            if not self._dirty_buttons:
+                return
+            now = time.monotonic()
+            next_due_at = min(button.next_render_due_at() for button in self._dirty_buttons.values())
+        self._schedule_dirty_flush(delay_s=max(0.0, next_due_at - now))
+
+    def _schedule_dirty_flush(self, delay_s: float):
+        with self._dirty_buttons_lock:
+            if self._dirty_flush_timer is not None and self._dirty_flush_timer.is_alive():
+                return
+
+            def enqueue_flush():
+                with self._dirty_buttons_lock:
+                    self._dirty_flush_timer = None
+                    self._dirty_flush_due_at = None
+                if self.event_loop_run:
+                    self.event_queue.put("flush-dirty")
+
+            due_at = time.monotonic() + delay_s
+            if self._dirty_flush_timer is not None and self._dirty_flush_timer.is_alive():
+                if self._dirty_flush_due_at is not None and self._dirty_flush_due_at <= due_at:
+                    return
+                self._dirty_flush_timer.cancel()
+
+            self._dirty_flush_due_at = due_at
+            self._dirty_flush_timer = threading.Timer(delay_s, enqueue_flush)
+            self._dirty_flush_timer.name = "Cockpit::Dirty Flush"
+            self._dirty_flush_timer.daemon = True
+            self._dirty_flush_timer.start()
 
     def stop_event_loop(self):
         if self.event_loop_run:

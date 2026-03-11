@@ -6,6 +6,7 @@ import logging
 import os
 import threading
 import pickle
+import time
 
 from PIL import Image, ImageFont
 from cairosvg import svg2png
@@ -459,6 +460,7 @@ class Aircraft:
     # Load, start and terminates
     #
     def create_decks(self):
+        create_decks_started_at = time.perf_counter()
         # Default attribute values
         # Named colors
         self.named_colors.update(self._config.get(CONFIG_KW.NAMED_COLORS.value, {}))
@@ -512,6 +514,7 @@ class Aircraft:
         self.virtual_decks = {}
 
         for deck_config in decks:
+            deck_started_at = time.perf_counter()
             name = deck_config.get(CONFIG_KW.NAME.value, f"Deck {cnt}")
 
             disabled = deck_config.get(CONFIG_KW.DISABLED.value)
@@ -542,7 +545,9 @@ class Aircraft:
                     serial = serial_numbers.get(name)
 
             # if serial is not None:
+            get_device_started_at = time.perf_counter()
             device = self.cockpit.get_device(req_driver=deck_driver, req_serial=serial)
+            logger.info(f"create_decks deck {name}: get_device took {(time.perf_counter() - get_device_started_at) * 1000.0:.1f}ms")
             if device is not None:
                 #
                 if serial is None:
@@ -556,7 +561,9 @@ class Aircraft:
                 else:
                     deck_config[CONFIG_KW.SERIAL.value] = serial
                 if name not in self.decks.keys():
+                    construct_started_at = time.perf_counter()
                     self.decks[name] = self.all_deck_drivers[deck_driver][0](name=name, config=deck_config, cockpit=self.cockpit, device=device)
+                    logger.info(f"create_decks deck {name}: construct/start took {(time.perf_counter() - construct_started_at) * 1000.0:.1f}ms")
                     if deck_driver == VIRTUAL_DECK_DRIVER:
                         deck_flat = self.deck_types.get(deck_type).desc()
                         if DECK_KW.BACKGROUND.value in deck_flat and DECK_KW.IMAGE.value in deck_flat[DECK_KW.BACKGROUND.value]:
@@ -575,10 +582,13 @@ class Aircraft:
                     cnt = cnt + 1
                     deck_layout = deck_config.get(DECK_KW.LAYOUT.value, DEFAULT_LAYOUT)
                     logger.info(f"deck {name} added ({deck_type}, driver {deck_driver}, layout {deck_layout})")
+                    logger.info(f"create_decks deck {name}: total took {(time.perf_counter() - deck_started_at) * 1000.0:.1f}ms")
                 else:
                     logger.warning(f"deck {name} already exist, ignoring")
             else:
                 logger.error(f"deck {deck_type} {name} has no device, ignoring")
+
+        logger.info(f"create_decks total took {(time.perf_counter() - create_decks_started_at) * 1000.0:.1f}ms")
 
     def remove_web_decks(self):
         if not self.virtual_decks_added:
@@ -652,6 +662,11 @@ class Aircraft:
         Loads decks for aircraft in supplied path.
         First unloads a previously loaded aircraft if any
         """
+        start_started_at = time.perf_counter()
+
+        def log_stage(stage: str, stage_started_at: float):
+            logger.info(f"aircraft.start stage {stage} took {(time.perf_counter() - stage_started_at) * 1000.0:.1f}ms")
+
         if acpath is None:
             logger.warning("no new aircraft path to load, not unloading current one")
             return
@@ -681,16 +696,29 @@ class Aircraft:
             self._name = Aircraft.get_aircraft_name_from_aircraft_path(acpath)
             logger.info(f"aircraft name set to {self._name}")
 
+            stage_started_at = time.perf_counter()
             self.load_deck_types()
+            log_stage("load_deck_types", stage_started_at)
+
+            stage_started_at = time.perf_counter()
             self.scan_web_decks()
+            log_stage("scan_web_decks", stage_started_at)
 
             if len(self.devices) == 0:
                 logger.warning("no device")
                 return
 
+            stage_started_at = time.perf_counter()
             self.load_resources()
+            log_stage("load_resources", stage_started_at)
+
+            stage_started_at = time.perf_counter()
             self.create_decks()
+            log_stage("create_decks", stage_started_at)
+
+            stage_started_at = time.perf_counter()
             self.load_pages()
+            log_stage("load_pages", stage_started_at)
             self._running = True
         else:
             if acpath is None:
@@ -700,6 +728,7 @@ class Aircraft:
             else:
                 logger.error(f"no Cockpitdecks folder '{CONFIG_FOLDER}' in aircraft folder {acpath}")
             self.create_default_decks()
+        logger.info(f"aircraft.start total took {(time.perf_counter() - start_started_at) * 1000.0:.1f}ms")
         logger.info(f"..aircraft {os.path.basename(acpath)} started")
 
     def terminate(self):

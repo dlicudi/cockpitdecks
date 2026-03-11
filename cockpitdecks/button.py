@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 import logging
 import sys
+import time
 from pprint import pformat
 from abc import ABC, abstractmethod
 
@@ -50,6 +51,7 @@ class StateVariableValueProvider(ABC, ValueProvider):
 
 class Button(VariableListener, SimulatorVariableValueProvider, StateVariableValueProvider, ActivationValueProvider):
     def __init__(self, config: dict, page: "Page"):
+        started_at = time.perf_counter()
         VariableListener.__init__(self)
 
         # Definition and references
@@ -93,6 +95,8 @@ class Button(VariableListener, SimulatorVariableValueProvider, StateVariableValu
         self.initial_value = config.get(CONFIG_KW.INITIAL_VALUE.value)
         self.current_value = None
         self.previous_value = None
+        self._render_cooldown_ms = max(0, int(config.get("render-cooldown-ms", 0) or 0))
+        self._last_render_at = 0.0
 
         #### Options
         #
@@ -104,12 +108,14 @@ class Button(VariableListener, SimulatorVariableValueProvider, StateVariableValu
         #
         self._activation = None
         atype = Button.guess_activation_type(config)
+        activation_started_at = time.perf_counter()
         if atype is not None and atype in self.deck.cockpit.all_activations:
             self._activation = self.deck.cockpit.all_activations[atype](self)
             logger.debug(f"button {self.name} activation {atype}")
         else:
             logger.info(f"button {self.name} has no activation defined, using default activation 'none'")
             self._activation = self.deck.cockpit.all_activations["none"](self)
+        activation_duration_ms = (time.perf_counter() - activation_started_at) * 1000.0
 
         #### Representation
         #
@@ -119,19 +125,24 @@ class Button(VariableListener, SimulatorVariableValueProvider, StateVariableValu
         rtype = Button.guess_representation_type(
             config, all_representations=self.deck.cockpit.all_representations, all_hardware_representations=self.deck.cockpit.all_hardware_representations
         )
+        representation_started_at = time.perf_counter()
         if rtype is not None and rtype in self.deck.cockpit.all_representations:
             self._representation = self.deck.cockpit.all_representations[rtype](button=self)
             logger.debug(f"button {self.name} representation {rtype}")
         else:
             logger.info(f"button {self.name} has no representation defined, using default representation 'none'")
             self._representation = self.deck.cockpit.all_representations["none"](self)
+        representation_duration_ms = (time.perf_counter() - representation_started_at) * 1000.0
 
         self._hardware_representation = None
+        hardware_representation_duration_ms = 0.0
         if self.deck.is_virtual_deck() and self._definition.has_hardware_representation():
             rtype = self._definition.get_hardware_representation()
             if rtype is not None and rtype in self.deck.cockpit.all_representations:
                 logger.debug(f"button {self.name} has hardware representation {rtype}")
+                hardware_representation_started_at = time.perf_counter()
                 self._hardware_representation = self.deck.cockpit.all_representations[rtype](self)
+                hardware_representation_duration_ms = (time.perf_counter() - hardware_representation_started_at) * 1000.0
 
         #### Datarefs
         #
@@ -163,8 +174,11 @@ class Button(VariableListener, SimulatorVariableValueProvider, StateVariableValu
         # Regular datarefs
         self.all_datarefs = None  # all datarefs used by this button
         self.all_datarefs = self.get_variables()  # this does not contain string datarefs
+        dataref_registration_duration_ms = 0.0
         if len(self.all_datarefs) > 0:
+            dataref_registration_started_at = time.perf_counter()
             self.page.register_simulator_variable(self, attach=False)  # page activation decides when listeners are attached
+            dataref_registration_duration_ms = (time.perf_counter() - dataref_registration_started_at) * 1000.0
             # string-datarefs are not monitored by the page, they get sent by the XPPython3 plugin
         # add string datarefs to all_datarefs after their registration at the page level
         self.all_datarefs = self.all_datarefs
@@ -179,6 +193,13 @@ class Button(VariableListener, SimulatorVariableValueProvider, StateVariableValu
         ActivationValueProvider.__init__(self, name=self.name, activation=self._activation)
 
         self.init()
+        total_duration_ms = (time.perf_counter() - started_at) * 1000.0
+        if total_duration_ms >= 100.0:
+            logger.info(
+                f"button {self.name} ({self.index}) init took {total_duration_ms:.1f}ms on page {self.page.name} "
+                f"[activation={activation_duration_ms:.1f}ms, representation={representation_duration_ms:.1f}ms, "
+                f"hardware={hardware_representation_duration_ms:.1f}ms, datarefs={dataref_registration_duration_ms:.1f}ms]"
+            )
 
     @staticmethod
     def guess_index(config):
@@ -339,21 +360,24 @@ class Button(VariableListener, SimulatorVariableValueProvider, StateVariableValu
         """
         Install button
         """
-        # Register itself as listener of its variables
-
-        # Set initial value if not already set
-        if self._first_value_not_saved:
-            logger.debug(f"button {self.name} setting initial value..")
-            if self.initial_value is not None:
-                logger.debug(f"button {self.name} .. from initial-value")
-                self.value = self.initial_value
-            else:
-                logger.debug(f"button {self.name} .. from compute_value")
-                self.value = self.compute_value()
+        init_started_at = time.perf_counter()
+        compute_value_duration_ms = 0.0
+        if self._first_value_not_saved and self.initial_value is not None:
+            logger.debug(f"button {self.name} .. from initial-value")
+            self.value = self.initial_value
             logger.debug(f"button {self.name}: ..has value {self.current_value}.")
-        else:
-            logger.debug(f"button {self.name}: already has a value ({self.current_value}), initial value ignored")
-        # logger.debug(f"button {self.name}: {self.id()}")
+        init_duration_ms = (time.perf_counter() - init_started_at) * 1000.0
+        if init_duration_ms >= 100.0:
+            logger.info(
+                f"button {self.name} ({self.index}) init() took {init_duration_ms:.1f}ms on page {self.page.name} "
+                f"[compute_value={compute_value_duration_ms:.1f}ms]"
+            )
+
+    def ensure_initialized(self):
+        if not self._first_value_not_saved:
+            return
+        logger.debug(f"button {self.name} lazily computing initial value")
+        self.value = self.compute_value()
 
     def register_simulator_variable(self):
         # Declared string dataref must be create FIRST so that they get the proper type.
@@ -621,9 +645,9 @@ class Button(VariableListener, SimulatorVariableValueProvider, StateVariableValu
         - After activation
         """
 
-        # 1. Special cases (Annunciator): Each annunciator part has its own evaluation
-        if isinstance(self._representation, Annunciator):
-            logger.debug(f"button {self.name}: is Annunciator, getting part values")
+        # 1. Representation-specific visible state snapshots.
+        if hasattr(self._representation, "get_current_values"):
+            logger.debug(f"button {self.name}: representation {type(self._representation).__name__}, getting current values")
             return self._representation.get_current_values()
 
         # 2. dataref or formula based
@@ -671,7 +695,7 @@ class Button(VariableListener, SimulatorVariableValueProvider, StateVariableValu
 
         if data == self._value:
             logger.log(SPAM_LEVEL, "self value changed, rendering")
-            self.render()
+            self.request_render()
             return
 
         self.value = self.compute_value()
@@ -680,7 +704,7 @@ class Button(VariableListener, SimulatorVariableValueProvider, StateVariableValu
                 SPAM_LEVEL,
                 f"button {self.name}: {self.previous_value} -> {self.current_value}",
             )
-            self.render()
+            self.request_render()
         else:
             logger.debug(f"button {self.name}: no change")
 
@@ -718,11 +742,11 @@ class Button(VariableListener, SimulatorVariableValueProvider, StateVariableValu
                 SPAM_LEVEL,
                 f"activate: button {self.name}: {self.previous_value} -> {self.current_value}",
             )
-            self.render()
+            self.request_render()
         else:
             logger.debug(f"button {self.name}: no change")
             if self.deck.is_virtual_deck() or always_render():  # representation has not changed, but hardware representation might have
-                self.render()
+                self.request_render()
         return True
 
     def get_state_variables(self):
@@ -741,6 +765,7 @@ class Button(VariableListener, SimulatorVariableValueProvider, StateVariableValu
         Called from deck to get what's necessary for displaying this button on the deck.
         It can be an image, a color, a binary value on/off...
         """
+        self.ensure_initialized()
         if not self._representation.is_valid():
             logger.warning(f"button {self.name}: representation is not valid")
             return None
@@ -755,6 +780,7 @@ class Button(VariableListener, SimulatorVariableValueProvider, StateVariableValu
         Called from deck to get what's necessary for displaying this button on the deck.
         It can be an image, a color, a binary value on/off...
         """
+        self.ensure_initialized()
         if self._hardware_representation is None:
             return None
         if not self._hardware_representation.is_valid():
@@ -798,18 +824,46 @@ class Button(VariableListener, SimulatorVariableValueProvider, StateVariableValu
             if self.on_current_page() and not self.mosaic and not self._part_of_multi:
                 # Mosaic and buttons parts of a multi-buttons cannot take the initiative to render themselves.
                 # Instruction to render has to come from "parent" button.
+                started = time.perf_counter()
                 try:
+                    self._last_render_at = time.monotonic()
                     self.deck.render(self)
                     logger.log(SPAM_LEVEL, f"RENDER {self.name} ({self.value})")
                 except:
                     logger.warning(f"button {self.name}: problem during rendering", exc_info=True)
                     return
+                duration_ms = (time.perf_counter() - started) * 1000.0
+                if duration_ms >= 50.0:
+                    page_name = self.page.name if self.page is not None else "?"
+                    rep_name = type(self._representation).__name__ if self._representation is not None else "None"
+                    logger.info(
+                        f"button {self.name}: live render took {duration_ms:.1f}ms on page {page_name} "
+                        f"({rep_name})"
+                    )
                 # self.inc(COCKPITDECKS_INTVAR.BUTTON_RENDERS.value, cascade=False)
                 logger.debug(f"button {self.name} rendered")
             else:
                 logger.debug(f"button {self.name} not on current page")
         else:
             logger.warning(f"button {self.name} has no deck")  # error
+
+    def request_render(self):
+        if self.deck is None:
+            logger.warning(f"button {self.name} has no deck")
+            return
+        cockpit = self.deck.cockpit
+        if cockpit is None:
+            self.render()
+            return
+        if hasattr(cockpit, "mark_button_dirty"):
+            cockpit.mark_button_dirty(self)
+        else:
+            self.render()
+
+    def next_render_due_at(self) -> float:
+        if self._render_cooldown_ms <= 0:
+            return 0.0
+        return self._last_render_at + self._render_cooldown_ms / 1000.0
 
     def clean(self):
         """

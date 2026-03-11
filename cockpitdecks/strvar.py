@@ -618,6 +618,9 @@ class TextWithVariables(StringWithVariables):
             logger.debug(f"variable {self.display_name}: before variable substitution: {text}")
             text = self.substitute_values(text=text, formatting=self.format, default=default, cascade=True)
             logger.debug(f"variable {self.display_name}: after variable substitution: {text}")
+            if isinstance(text, str) and text.strip() == "" and (len(self._tokens) > 0 or KW_FORMULA_STR in str(self.message)):
+                logger.debug(f"variable {self.display_name}: substituted text is blank, using default '{default}'")
+                return default
 
         # print("GET TEXT", self.display_name, self.message.replace("\n", "<CR>"), self.is_static, text.replace("\n", "<CR>"))
         return text

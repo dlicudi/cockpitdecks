@@ -1,6 +1,7 @@
 # Set of buttons for a deck
 #
 import logging
+import time
 from typing import Dict
 
 from cockpitdecks import ID_SEP, DEFAULT_ATTRIBUTE_PREFIX
@@ -105,6 +106,7 @@ class Page:
 
     def load_buttons(self, buttons: dict, deck_type: DeckType, add_to_page: bool = True) -> list:
         built = []
+        started_at = time.perf_counter()
         for button_config in buttons:
             try:
                 button = None
@@ -150,6 +152,10 @@ class Page:
                     logger.debug(f"..page {self.name}: added button index {idx} {button.name} ({aty}, {rty})..")
             except:
                 logger.warning(f"page {self.name}: could not add button button ({button_config}), ignored", exc_info=True)
+        logger.info(
+            f"page {self.name}: load_buttons took {(time.perf_counter() - started_at) * 1000.0:.1f}ms "
+            f"for {len(buttons)} definitions, built {len(built)}"
+        )
         return built
 
     def inspect(self, what: str | None = None):
@@ -238,9 +244,18 @@ class Page:
         """
         Renders this page on the deck
         """
+        render_started_at = time.perf_counter()
         for button in self.buttons.values():
+            button_started_at = time.perf_counter()
             button.render()
+            button_duration_ms = (time.perf_counter() - button_started_at) * 1000
+            if button_duration_ms >= 50.0:
+                logger.info(f"page {self.name}: slow button render {button.name} took {button_duration_ms:.1f}ms")
             logger.debug(f"page {self.name}: button {button.name} rendered")
+
+        page_render_duration_ms = (time.perf_counter() - render_started_at) * 1000
+        if page_render_duration_ms >= 100.0:
+            logger.info(f"page {self.name}: render took {page_render_duration_ms:.1f}ms for {len(self.buttons)} buttons")
 
         self.inc(COCKPITDECKS_INTVAR.PAGE_RENDER.value)
 
