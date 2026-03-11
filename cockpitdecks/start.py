@@ -442,8 +442,6 @@ logger.info("..initialized\n")
 #
 # Local key words and defaults
 #
-AIRCRAFT_ASSET_FOLDER = os.path.join(AIRCRAFT_HOME, CONFIG_FOLDER, RESOURCES_FOLDER)
-AIRCRAFT_DECK_TYPES = os.path.join(AIRCRAFT_ASSET_FOLDER, DECKS_FOLDER, DECK_TYPES)
 CODE = "code"
 WEBDECK_DEFAULTS = "presentation-default"
 WEBDECK_WSURL = "ws_url"
@@ -452,6 +450,19 @@ WEBDECK_WSURL = "ws_url"
 # Flask Web Server (& WebSocket Server)
 #
 app = Flask(__NAME__, template_folder=TEMPLATE_FOLDER)
+
+
+def get_aircraft_home():
+    acpath = getattr(cockpit.aircraft, "acpath", None)
+    return acpath if acpath is not None else AIRCRAFT_HOME
+
+
+def get_aircraft_asset_folder():
+    return os.path.join(get_aircraft_home(), CONFIG_FOLDER, RESOURCES_FOLDER)
+
+
+def get_aircraft_deck_types_folder():
+    return os.path.join(get_aircraft_asset_folder(), DECKS_FOLDER, DECK_TYPES)
 
 # app.logger.setLevel(logging.DEBUG)
 # app.config["EXPLAIN_TEMPLATE_LOADING"] = True
@@ -474,7 +485,7 @@ def send_asset(path):
 
 @app.route("/aircraft/<path:path>")
 def send_aircraft_asset(path):
-    return send_from_directory(AIRCRAFT_ASSET_FOLDER, path)
+    return send_from_directory(get_aircraft_asset_folder(), path)
 
 
 # Designers
@@ -558,7 +569,7 @@ def deck_designer():
     deck_config = {"deck-type-flat": {"background": {"image": background_image}, "aircraft": background_image.startswith("/aircraft")}}
 
     designer_config = {}
-    designer_config_file = os.path.abspath(os.path.join(AIRCRAFT_HOME, CONFIG_FOLDER, RESOURCES_FOLDER, DECKS_FOLDER, DESIGNER_CONFIG_FILE))
+    designer_config_file = os.path.abspath(os.path.join(get_aircraft_home(), CONFIG_FOLDER, RESOURCES_FOLDER, DECKS_FOLDER, DESIGNER_CONFIG_FILE))
     if os.path.exists(designer_config_file):
         with open(designer_config_file, "r") as fp:
             designer_config = yaml.load(fp)
@@ -578,17 +589,18 @@ def button_designer_io():
         if CONFIG_KW.NAME.value not in data[CONFIG_FOLDER]:
             return {"status": "no name"}
 
-        if not os.path.exists(AIRCRAFT_DECK_TYPES):
-            os.makedirs(AIRCRAFT_DECK_TYPES, exist_ok=True)
+        aircraft_deck_types = get_aircraft_deck_types_folder()
+        if not os.path.exists(aircraft_deck_types):
+            os.makedirs(aircraft_deck_types, exist_ok=True)
 
         name = data[CONFIG_FOLDER].get(CONFIG_KW.NAME.value)
-        fn = os.path.join(AIRCRAFT_DECK_TYPES, name + ".json")
+        fn = os.path.join(aircraft_deck_types, name + ".json")
         with open(fn, "w") as fp:
             json.dump(data[CODE], fp, indent=2)
             logger.info(f"Konva saved ({fn})")
 
         savename = AUTOSAVE_FILE if name == "autosave" else name + ".yaml"  # autosave is hardcoded keywork in javascript deck designer
-        ln = os.path.join(AIRCRAFT_DECK_TYPES, savename )
+        ln = os.path.join(aircraft_deck_types, savename )
         with open(ln, "w") as fp:
             yaml.dump(data[CONFIG_FOLDER], fp)
             logger.info(f"layout saved ({ln})")
@@ -603,7 +615,7 @@ def button_designer_io():
     if name is not None:
         if "." in name:
             name = os.path.splitext(os.path.basename(name))[0]
-        fn = os.path.join(AIRCRAFT_DECK_TYPES, name + ".json")
+        fn = os.path.join(get_aircraft_deck_types_folder(), name + ".json")
         logger.info(f"loading Konva ({fn})", args)
         with open(fn, "r") as fp:
             code = json.load(fp)
@@ -719,14 +731,21 @@ def cockpit_wshandler():
 def main():
     try:
         appsrvstarted = False
-        logger.info(f"Starting {AIRCRAFT_DESC}..")
-        if ac is None and SIMULATOR_HOME is not None:
+        start_acpath = AIRCRAFT_HOME
+        start_desc = AIRCRAFT_DESC
+        if ac is None and mode == CD_MODE.NORMAL:
+            start_acpath = None
+            start_desc = __NAME__.title()
+
+        logger.info(f"Starting {start_desc}..")
+        if start_acpath is None and SIMULATOR_HOME is not None:
             logger.info(
-                f"(starting in demonstration mode but will load aircraft if {SIMULATOR_NAME} is running and aircraft with Cockpitdecks {CONFIG_FOLDER} loaded)"
+                f"(starting without a preloaded aircraft; will load aircraft if {SIMULATOR_NAME} is running and aircraft with Cockpitdecks {CONFIG_FOLDER} loaded)"
             )
-        cockpit.start_aircraft(acpath=AIRCRAFT_HOME, release=args.designer, mode=mode.value)
-        logger.info(f"..{AIRCRAFT_DESC} running..")
-        if cockpit.has_web_decks() or (len(cockpit.get_deck_background_images()) > 0 and args.designer):
+        cockpit.start_aircraft(acpath=start_acpath, release=args.designer, mode=mode.value)
+        logger.info(f"..{start_desc} running..")
+        designer_images_available = args.designer and cockpit.aircraft.acpath is not None and len(cockpit.get_deck_background_images()) > 0
+        if cockpit.has_web_decks() or designer_images_available:
             if not cockpit.has_web_decks():
                 logger.warning("no web deck, starting application server for designer")
             logger.info("starting application server..")
