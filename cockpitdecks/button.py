@@ -687,6 +687,10 @@ class Button(VariableListener, SimulatorVariableValueProvider, StateVariableValu
         """
         One of its dataref has changed, records its value and provoke an update of its representation.
         """
+        if not hasattr(self, "_value") or self._value is None:
+            logger.debug(f"button {self.name}: ignoring variable change before initialization")
+            return
+
         if not isinstance(data, (SimulatorVariable, InternalVariable, StringWithVariables)):
             logger.error(f"button {self.name}: not a simulator or internal variable ({type(data).__name__})")
             return

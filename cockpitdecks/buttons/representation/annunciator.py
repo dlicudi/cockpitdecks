@@ -3,11 +3,12 @@
 #
 import logging
 import threading
+import time
 from typing import Dict, List, Set
 from enum import Enum
 from PIL import Image, ImageDraw, ImageFilter
 
-from cockpitdecks import CONFIG_KW, ANNUNCIATOR_STYLES
+from cockpitdecks import CONFIG_KW, ANNUNCIATOR_STYLES, DEFAULT_ATTRIBUTE_PREFIX
 from cockpitdecks.resources.color import convert_color, light_off, is_number
 from cockpitdecks.simulator import SimulatorVariable
 from cockpitdecks.strvar import TextWithVariables
@@ -67,7 +68,12 @@ class AnnunciatorPart:
         self.color = config.get("color")
 
         self._value = Value(name, config=config, provider=annunciator.button)
-        self._display = TextWithVariables(owner=annunciator.button, config=self._config, prefix=CONFIG_KW.TEXT.value)
+        self._display = TextWithVariables(
+            owner=annunciator.button,
+            config=self._config,
+            prefix=CONFIG_KW.TEXT.value,
+            register_listeners=False,
+        )
 
         self._width = None
         self._height = None
@@ -103,6 +109,7 @@ class AnnunciatorPart:
         if self.datarefs is None:
             self.datarefs = self._value.get_variables() | self._display.get_variables()
         return self.datarefs
+
 
     def get_attribute(self, attribute: str, default=None, propagate: bool = True, silence: bool = True):
         # Is there such an attribute directly in the button defintion?
@@ -224,40 +231,48 @@ class AnnunciatorPart:
             return framed.lower() in ["true", "on", "yes", "1"]
         return False
 
-    def render(self, draw, bgrd_draw, icon_size, annun_width, annun_height, inside, size):
+    def render(self, draw, bgrd_draw, icon_size, annun_width, annun_height, inside, size, state=None):
+        started_at = time.perf_counter()
         self.set_sizes(annun_width, annun_height)
         TEXT_SIZE = int(self.height() / 2)  # @todo: find optimum variable text size depending on text length
-        color = self.get_color()
+        if state is None:
+            state = self.get_render_state()
+        color = state["color"]
         # logger.debug(f"button {self.button.name}: annunc {annun_width}x{annun_height}, offset ({width_offset}, {height_offset}), box {box}")
         # logger.debug(f"button {self.button.name}: part {partname}: {self.width()}x{self.height()}, center ({self.center_w()}, {self.center_h()})")
         # logger.debug(f"button {self.button.name}: part {partname}: {is_lit}, {color}")
-        text = self._display.get_text()
+        text_started_at = time.perf_counter()
+        text = state["text"]
+        text_duration_ms = (time.perf_counter() - text_started_at) * 1000.0
         if text == "":
             logger.debug(f"button {self.annunciator.button.name}: empty text, assumes drawing")
         if text is not None and text != "":
             #
             # Annunciator part will display text
             #
+            font_started_at = time.perf_counter()
             font = self.annunciator.get_font(self._display.font, self._display.size)
+            font_duration_ms = (time.perf_counter() - font_started_at) * 1000.0
 
-            if self.is_lit or not self.annunciator.annunciator_style == ANNUNCIATOR_STYLES.VIVISUN:
-                if self.is_lit and self.is_invert():
+            if state["lit"] or not self.annunciator.annunciator_style == ANNUNCIATOR_STYLES.VIVISUN:
+                if state["lit"] and state["invert"]:
                     frame = (
                         (
-                            self.center_w() - self.width() / 2,
-                            self.center_h() - self.height() / 2,
-                        ),
-                        (
-                            self.center_w() + self.width() / 2,
-                            self.center_h() + self.height() / 2,
-                        ),
-                    )
+                        self.center_w() - self.width() / 2,
+                        self.center_h() - self.height() / 2,
+                    ),
+                    (
+                        self.center_w() + self.width() / 2,
+                        self.center_h() + self.height() / 2,
+                    ),
+                )
                     bgrd_draw.rectangle(frame, fill=self.invert_color())
                     logger.debug(f"button {self.annunciator.button.name}: part {self.name}: lit reverse")
 
                 # logger.debug(f"button {self.button.name}: text '{text}' at ({self.center_w()}, {self.center_h()})")
-                if not self.is_lit and type(self.annunciator) != AnnunciatorAnimate:
+                if not state["lit"] and type(self.annunciator) != AnnunciatorAnimate:
                     logger.debug(f"button {self.annunciator.button.name}: part {self.name}: not lit (Korry)")
+                draw_started_at = time.perf_counter()
                 draw.multiline_text(
                     (self.center_w(), self.center_h()),
                     text=text,
@@ -266,8 +281,10 @@ class AnnunciatorPart:
                     align="center",
                     fill=color,
                 )
+                draw_duration_ms = (time.perf_counter() - draw_started_at) * 1000.0
 
-                if self.has_frame():
+                if state["framed"]:
+                    frame_started_at = time.perf_counter()
                     txtbb = draw.multiline_textbbox(
                         (self.center_w(), self.center_h()),
                         text=text,
@@ -304,17 +321,28 @@ class AnnunciatorPart:
                     thick = int(self.height() / 16)
                     # logger.debug(f"button {self.button.name}: part {partname}: {framebb}, {framemax}, {frame}")
                     draw.rectangle(frame, outline=color, width=thick)
+                    frame_duration_ms = (time.perf_counter() - frame_started_at) * 1000.0
+                else:
+                    frame_duration_ms = 0.0
             else:
-                if not self.is_lit and type(self.annunciator) != AnnunciatorAnimate:
+                if not state["lit"] and type(self.annunciator) != AnnunciatorAnimate:
                     logger.debug(f"button {self.annunciator.button.name}: part {self.name}: not lit (type vivisun)")
+                draw_duration_ms = 0.0
+                frame_duration_ms = 0.0
+            total_duration_ms = (time.perf_counter() - started_at) * 1000.0
+            if total_duration_ms >= 100.0:
+                logger.info(
+                    f"button {self.annunciator.button.name}: part {self.name} render took {total_duration_ms:.1f}ms "
+                    f"[text={text_duration_ms:.1f}ms, font={font_duration_ms:.1f}ms, draw={draw_duration_ms:.1f}ms, frame={frame_duration_ms:.1f}ms]"
+                )
             return
 
-        led = self.get_led()
+        led = state["led"]
         if led is None:
             logger.warning(f"button {self.annunciator.button.name}: part {self.name}: no text, no led")
             return
 
-        if self.is_lit or not self.annunciator.annunciator_style == ANNUNCIATOR_STYLES.VIVISUN:
+        if state["lit"] or not self.annunciator.annunciator_style == ANNUNCIATOR_STYLES.VIVISUN:
             ninside = 6
             if led in [ANNUNCIATOR_LED.BLOCK.value, ANNUNCIATOR_LED.LED.value]:
                 LED_BLOC_HEIGHT = int(self.height() / 2)
@@ -373,6 +401,9 @@ class AnnunciatorPart:
                 draw.polygon(triangle, outline=color, width=STROKE_THICK)
             else:
                 logger.warning(f"button {self.annunciator.button.name}: part {self.name}: invalid led {led}")
+        total_duration_ms = (time.perf_counter() - started_at) * 1000.0
+        if total_duration_ms >= 100.0:
+            logger.info(f"button {self.annunciator.button.name}: part {self.name} render took {total_duration_ms:.1f}ms [led={led}]")
 
 
 class Annunciator(DrawBase):
@@ -594,6 +625,7 @@ class Annunciator(DrawBase):
         return image
 
     def get_image_for_icon(self):
+        total_started_at = time.perf_counter()
         # If the part is not lit, a darker version is printed unless dark option is added to button
         # in which case nothing gets added to the button.
         # CONSTANTS
@@ -646,11 +678,15 @@ class Annunciator(DrawBase):
         guard = Image.new(mode="RGBA", size=(ICON_SIZE, ICON_SIZE), color=annun_color)  # annunuciator optional guard
         guard_draw = ImageDraw.Draw(guard)
 
-        for part in self.annunciator_parts.values():
-            part.render(draw, bgrd_draw, ICON_SIZE, annun_width, annun_height, inside, size)
+        parts_started_at = time.perf_counter()
+        states = self.button.value if isinstance(self.button.value, dict) else self.get_current_values()
+        for part_name, part in self.annunciator_parts.items():
+            part.render(draw, bgrd_draw, ICON_SIZE, annun_width, annun_height, inside, size, state=states.get(part_name))
+        parts_duration_ms = (time.perf_counter() - parts_started_at) * 1000.0
 
         # PART 1.2: Glowing texts, later because not nicely perfect.
         if self.annunciator_style == ANNUNCIATOR_STYLES.KORRY:
+            blur_started_at = time.perf_counter()
             # blurred_image = glow.filter(ImageFilter.UnsharpMask(radius=2, percent=200, threshold=10))
             blurred_image1 = glow.filter(ImageFilter.GaussianBlur(10))  # self.annunciator.get("blurr", 10)
             blurred_image2 = glow.filter(ImageFilter.GaussianBlur(4))  # self.annunciator.get("blurr", 10)
@@ -659,6 +695,9 @@ class Annunciator(DrawBase):
             glow.alpha_composite(blurred_image2)
             # glow = blurred_image
             # logger.debug("blurred")
+            blur_duration_ms = (time.perf_counter() - blur_started_at) * 1000.0
+        else:
+            blur_duration_ms = 0.0
 
         # PART 1.3: Seal
         if self.button.has_option("seal"):
@@ -688,13 +727,16 @@ class Annunciator(DrawBase):
 
         # PART 2: Make annunciator
         # Paste the transparent text/glow into the annunciator background (and optional seal):
+        composite_started_at = time.perf_counter()
         annunciator = Image.new(mode="RGBA", size=(annun_width, annun_height), color=annun_color)
         annunciator.alpha_composite(bgrd)  # potential inverted colors
         # annunciator.alpha_composite(glow)    # texts
         annunciator.paste(glow, mask=glow)  # texts
+        composite_duration_ms = (time.perf_counter() - composite_started_at) * 1000.0
 
         # PART 3: Background
         # Paste the annunciator into the button background:
+        background_started_at = time.perf_counter()
         image = self.button.deck.get_icon_background(
             name=self.button_name,
             width=ICON_SIZE,
@@ -706,9 +748,11 @@ class Annunciator(DrawBase):
         )
         draw = ImageDraw.Draw(image)
         image.paste(annunciator, box=(int(width_offset), int(height_offset)))
+        background_duration_ms = (time.perf_counter() - background_started_at) * 1000.0
 
         # PART 4: Guard
         if self.button.has_guard():
+            guard_started_at = time.perf_counter()
             cover = self.button.guarded.get(CONFIG_KW.ANNUNCIATOR_MODEL.value, GUARD_TYPES.COVER.value)  # CONFIG_KW.ANNUNCIATOR_MODEL.value = "model"
             guard_color = self.button.guarded.get("color", "red")
             guard_color = convert_color(guard_color)
@@ -730,9 +774,19 @@ class Annunciator(DrawBase):
                     br = (ICON_SIZE, ICON_SIZE)
                     guard_draw.rectangle(tl + br, fill=guard_color)
             image.alpha_composite(guard)
+            guard_duration_ms = (time.perf_counter() - guard_started_at) * 1000.0
+        else:
+            guard_duration_ms = 0.0
 
         # PART 5: Label
         # Label will be added in Icon.get_image()
+        total_duration_ms = (time.perf_counter() - total_started_at) * 1000.0
+        if total_duration_ms >= 100.0:
+            logger.info(
+                f"button {self.button.name}: annunciator image build took {total_duration_ms:.1f}ms "
+                f"[parts={parts_duration_ms:.1f}ms, blur={blur_duration_ms:.1f}ms, composite={composite_duration_ms:.1f}ms, "
+                f"background={background_duration_ms:.1f}ms, guard={guard_duration_ms:.1f}ms]"
+            )
         return image
 
     def all_lit(self, on: bool):

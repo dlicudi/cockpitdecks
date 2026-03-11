@@ -53,15 +53,17 @@ class Value(StringWithVariables):
         self._permanent_keys: Tuple[str] = tuple()
         self._local_warning = True
 
-        StringWithVariables.__init__(self, owner=provider, name=local_name, message="")  # this allows to use get_xxx_variable_value()
+        # Buttons already subscribe directly to the raw simulator variables used
+        # by their Value objects. Avoid building a second reactive listener graph
+        # here and compute Value state on demand instead.
+        StringWithVariables.__init__(self, owner=provider, name=local_name, message="", register_listeners=False)  # this allows to use get_xxx_variable_value()
 
         # print("+++++ CREATED VALUE", self.name, provider.name, self.get_variables())
 
     def init(self):
         if self.formula is not None and self.formula != "":
             logger.debug(f"value {self.name}: has formula {self.formula}")
-            self._formula = Formula(owner=self._provider, formula=self.formula)
-            self._formula.add_listener(self._provider)
+            self._formula = Formula(owner=self._provider, formula=self.formula, register_listeners=False)
 
         # there is a special issue if dataref we get value from is also dataref we set
         # in this case there MUST be a formula to evalute the value before we set it
@@ -229,7 +231,7 @@ class Value(StringWithVariables):
     def value(self):
         # 1. If there is a formula, value comes from it
         if self.has_formula:
-            ret = self._formula.value
+            ret = self._formula.execute_formula(store=False, cascade=False)
             logger.debug(f"value {self.name}: {ret} (from formula)")
             return ret
 

@@ -2,6 +2,7 @@
 #
 from __future__ import annotations
 import logging
+import time
 from enum import Enum
 from abc import ABC, abstractmethod
 from typing import Dict, Any
@@ -269,8 +270,13 @@ class Variable(ABC):
 
     def notify(self):
         for lsnr in self.listeners:
+            started_at = time.perf_counter()
             lsnr.variable_changed(self)
+            duration_ms = (time.perf_counter() - started_at) * 1000.0
             lsnr_name = lsnr.vl_name if hasattr(lsnr, "vl_name") else f"no listener name for {self.name} ({type(lsnr)})"
+            if duration_ms >= 25.0:
+                page_name = lsnr.page.name if hasattr(lsnr, "page") and lsnr.page is not None else "no-page"
+                logger.info(f"{self.name}: slow listener {page_name}/{lsnr_name} took {duration_ms:.1f}ms")
             if hasattr(lsnr, "page") and lsnr.page is not None:
                 logger.log(
                     SPAM_LEVEL,

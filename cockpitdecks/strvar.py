@@ -55,6 +55,7 @@ class StringWithVariables(Variable, VariableListener):
         self._string_variables = None
         self._variables = None
         self._formats = {}  # for later @todo
+        self._resolved_icons = None
 
         self.init()
 
@@ -102,6 +103,24 @@ class StringWithVariables(Variable, VariableListener):
             return self.name[j:i]
         except ValueError:
             return self.name
+
+    @property
+    def page(self):
+        owner_page = getattr(self.owner, "page", None)
+        if owner_page is not None:
+            return owner_page
+        owner_button = getattr(self.owner, "button", None)
+        if owner_button is not None:
+            return getattr(owner_button, "page", None)
+        return None
+
+    def on_current_page(self) -> bool:
+        if hasattr(self.owner, "on_current_page"):
+            return self.owner.on_current_page()
+        owner_page = self.page
+        if owner_page is not None and hasattr(owner_page, "is_current_page"):
+            return owner_page.is_current_page()
+        return True
 
     # ##################################
     # Constituing Variables
@@ -167,6 +186,9 @@ class StringWithVariables(Variable, VariableListener):
         Args:
             data (Variable): [variable that has changed]
         """
+        if not self.on_current_page():
+            logger.debug(f"string-with-variable {self.display_name}: {data.name} changed while page is hidden, skipping")
+            return
         # print(">>>>> CHANGED", self.display_name, data.name, data.current_value)
         old_value = self.current_value  # kept for debug
         logger.debug(f"string-with-variable {self.display_name}: {data.name} changed, reevaluating..")
@@ -273,17 +295,23 @@ class StringWithVariables(Variable, VariableListener):
         if text is None:
             text = self.message
 
+        if self.is_static:
+            return text
+
         # If there is a icon font has the main font, the whole string is formatted with that font
-        if hasattr(self, "font"):  # must be a string with font specified so we know where to look for correspondance
-            for k, v in ICON_FONTS.items():
-                font = getattr(self, "font", "")
-                if font.lower().startswith(v[0].lower()):  # should be equal, except extension?
-                    s = "\\${%s:([^\\}]+?)}" % (k)
-                    icons = re.findall(s, text)
-                    for i in icons:
-                        if i in v[1].keys():
-                            text = text.replace(f"${{{k}:{i}}}", v[1][i])
-                            logger.debug(f"variable {self.display_name}: substituing font icon {i}")
+        if self._resolved_icons is None:
+            self._resolved_icons = self.message
+            if hasattr(self, "font"):  # must be a string with font specified so we know where to look for correspondance
+                for k, v in ICON_FONTS.items():
+                    font = getattr(self, "font", "") or ""
+                    if font.lower().startswith(v[0].lower()):  # should be equal, except extension?
+                        s = "\\${%s:([^\\}]+?)}" % (k)
+                        icons = re.findall(s, self._resolved_icons)
+                        for i in icons:
+                            if i in v[1].keys():
+                                self._resolved_icons = self._resolved_icons.replace(f"${{{k}:{i}}}", v[1][i])
+                                logger.debug(f"variable {self.display_name}: substituing font icon {i}")
+        text = self._resolved_icons if text == self.message else text
 
         for token in self._tokens:
             value = default
@@ -393,6 +421,9 @@ class Formula(StringWithVariables):
         Args:
             data (Variable): [variable that has changed]
         """
+        if not self.on_current_page():
+            logger.debug(f"formula {self.display_name}: {data.name} changed while page is hidden, skipping")
+            return
         # print(">>>>> CHANGED", self.display_name, data.name, data.current_value)
         old_value = self.current_value  # kept for debug
         logger.debug(f"formula {self.display_name}: {data.name} changed, recomputing..")
@@ -469,7 +500,7 @@ class TextWithVariables(StringWithVariables):
 
     """
 
-    def __init__(self, owner, config: dict, prefix: str = CONFIG_KW.LABEL.value):
+    def __init__(self, owner, config: dict, prefix: str = CONFIG_KW.LABEL.value, register_listeners: bool = True):
         self._config = config
         self.prefix = prefix
 
@@ -492,9 +523,9 @@ class TextWithVariables(StringWithVariables):
         self._formula = None
         formula = config.get(CONFIG_KW.FORMULA.value)
         if formula is not None and isinstance(message, str) and f"${{{CONFIG_KW.FORMULA.value}}}" in message:
-            self._formula = Formula(owner=owner, formula=formula)
+            self._formula = Formula(owner=owner, formula=formula, register_listeners=False)
 
-        StringWithVariables.__init__(self, owner=owner, message=message)  # will call init()
+        StringWithVariables.__init__(self, owner=owner, message=message, register_listeners=register_listeners)  # will call init()
 
     def get_variables(self) -> set:
         ret = super().get_variables()
@@ -583,7 +614,11 @@ class TextWithVariables(StringWithVariables):
         """
         if self._formula is not None:
             logger.debug(f"variable {self.display_name}: local formula result: {self._formula.current_value}")
-            return self._formula.value  # must cll value() to force computation, in case not computed before, .current_value might be None.
+            if self._formula._has_state_vars or self._formula._has_sim_vars:
+                return self._formula.execute_formula(store=False, cascade=False)
+            if self._formula.current_value is None:
+                return self._formula.execute_formula(store=False, cascade=False)
+            return self._formula.current_value
         logger.debug(f"variable {self.display_name}: no local formula")
         return super().get_formula_result(default=default)
 
@@ -616,11 +651,14 @@ class TextWithVariables(StringWithVariables):
         # 3. Rest of text: substitution of ${}
         if self.prefix != CONFIG_KW.LABEL.value:  # we may later lift this restriction to allow for dynamic labels?
             logger.debug(f"variable {self.display_name}: before variable substitution: {text}")
-            text = self.substitute_values(text=text, formatting=self.format, default=default, cascade=True)
+            text = self.substitute_values(text=text, formatting=self.format, default=default, store=False, cascade=False)
             logger.debug(f"variable {self.display_name}: after variable substitution: {text}")
             if isinstance(text, str) and text.strip() == "" and (len(self._tokens) > 0 or KW_FORMULA_STR in str(self.message)):
                 logger.debug(f"variable {self.display_name}: substituted text is blank, using default '{default}'")
+                self.current_value = default
                 return default
+
+        self.current_value = text
 
         # print("GET TEXT", self.display_name, self.message.replace("\n", "<CR>"), self.is_static, text.replace("\n", "<CR>"))
         return text
