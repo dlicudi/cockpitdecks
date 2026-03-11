@@ -675,7 +675,7 @@ class Button(VariableListener, SimulatorVariableValueProvider, StateVariableValu
             return
 
         self.value = self.compute_value()
-        if self.has_changed() or data.has_changed():
+        if self.has_changed():
             logger.log(
                 SPAM_LEVEL,
                 f"button {self.name}: {self.previous_value} -> {self.current_value}",
