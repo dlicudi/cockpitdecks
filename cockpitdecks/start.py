@@ -639,7 +639,8 @@ def deck(name: str):
     deck_desc = cockpit.get_virtual_deck_description(uname)
     # Inject our contact address:
     if type(deck_desc) is dict:
-        deck_desc[WEBDECK_WSURL] = f"ws://{APP_HOST[0]}:{APP_HOST[1]}/cockpit"
+        ws_host = request.host
+        deck_desc[WEBDECK_WSURL] = f"ws://{ws_host}/cockpit"
         deck_desc[WEBDECK_DEFAULTS] = cockpit.get_virtual_deck_defaults()
         deck_desc["dark_mode"] = cockpit.sim.is_night()
     else:
@@ -742,11 +743,13 @@ def main():
             logger.info(
                 f"(starting without a preloaded aircraft; will load aircraft if {SIMULATOR_NAME} is running and aircraft with Cockpitdecks {CONFIG_FOLDER} loaded)"
             )
-        cockpit.start_aircraft(acpath=start_acpath, release=args.designer, mode=mode.value)
+        release_to_startup = args.designer or mode == CD_MODE.NORMAL
+        cockpit.start_aircraft(acpath=start_acpath, release=release_to_startup, mode=mode.value)
         logger.info(f"..{start_desc} running..")
         designer_images_available = args.designer and cockpit.aircraft.acpath is not None and len(cockpit.get_deck_background_images()) > 0
-        if cockpit.has_web_decks() or designer_images_available:
-            if not cockpit.has_web_decks():
+        normal_mode_server = mode == CD_MODE.NORMAL
+        if cockpit.has_web_decks() or designer_images_available or normal_mode_server:
+            if not cockpit.has_web_decks() and not normal_mode_server:
                 logger.warning("no web deck, starting application server for designer")
             logger.info("starting application server..")
             appsrvstarted = True

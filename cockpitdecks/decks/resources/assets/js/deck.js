@@ -883,6 +883,7 @@ class Deck {
         // Resize window as well. Cannot get rid of top bar... (adds 24px)
         const extra_space = EDITOR_MODE ? 2 * TITLE_BAR_HEIGHT : TITLE_BAR_HEIGHT;
         var stage = this._stage;
+        var that = this;
 
         function set_default_size(container, sizes, color) {
             container.style["border"] = "1px solid "+color;
@@ -895,6 +896,7 @@ class Deck {
         }
 
         this.background_layer = layer
+        this.background_node = null
 
         const background = this.deck_type.background
         if (background == undefined || background == null) {
@@ -920,10 +922,26 @@ class Deck {
         // this loads the image and sets the size of the window to the size of the image
         // if the image loading fails, the suplied background size is set (if available
         // otherwise a default value is used.)
+        this._set_default_size = set_default_size
+        this._background_sizes = sizes
+        this._background_extra_space = extra_space
+        this.set_background_image(BACKGROUND_IMAGE_PATH, bgcolor);
+    }
+
+    set_background_image(image_url, fallback_color) {
+        const stage = this._stage;
+        const that = this;
+        const sizes = this._background_sizes;
+        const extra_space = this._background_extra_space;
+        if (fallback_color != undefined) {
+            this.container.style["background-color"] = fallback_color;
+        }
         let deckImage = new Image();
         deckImage.onerror = function() {
-            console.log("deckImage.onerror: backgroud image not found", BACKGROUND_IMAGE_PATH);
-            set_default_size(this.container, sizes, "red");
+            console.log("deckImage.onerror: background image not found", image_url);
+            that.background_layer.destroyChildren();
+            that.background_layer.draw();
+            that._set_default_size(that.container, sizes, "red");
         }
         deckImage.onload = function () {
             let deckbg = new Konva.Image({
@@ -933,14 +951,18 @@ class Deck {
             });
             stage.width(deckImage.naturalWidth);
             stage.height(deckImage.naturalHeight);
-            window.resizeTo(deckImage.naturalWidth,deckImage.naturalHeight + extra_space);
-            console.log("deckImage.onload", deckImage.naturalWidth,deckImage.naturalHeight + extra_space);
+            that.container.style.width = deckImage.naturalWidth + "px";
+            that.container.style.height = deckImage.naturalHeight + "px";
+            window.resizeTo(deckImage.naturalWidth, deckImage.naturalHeight + extra_space);
+            console.log("deckImage.onload", deckImage.naturalWidth, deckImage.naturalHeight + extra_space);
             original_width = deckImage.naturalWidth;
             original_height = deckImage.naturalHeight + extra_space;
-            // layer.add(deckbg);
+            that.background_layer.destroyChildren();
+            that.background_layer.add(deckbg);
+            that.background_node = deckbg;
+            that.background_layer.draw();
         };
-        deckImage.src = BACKGROUND_IMAGE_PATH;
-        // console.log("set_background_layer", DECK[DECK_TYPE_DESCRIPTION], image_path)
+        deckImage.src = image_url;
     }
 
     set_hardware_image_layer(layer) {

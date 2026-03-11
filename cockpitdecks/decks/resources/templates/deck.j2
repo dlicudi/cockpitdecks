@@ -182,29 +182,16 @@ function getQueryVariable(variable) {
 }
 
 function change_background(image_url, alt_color) {
-    fetch(image_url, {method: 'HEAD'})
-        .then(res => {
-            if (res.status === 200) {
-                console.log("background image", image_url);
-                deck_elem.style.backgroundImage = "url("+image_url+")";
-                deck_elem.style.backgroundRepeat = "no-repeat";
-                deck_elem.style.backgroundSize = "100% auto";
-                return;
-            }
-            console.log("background image not found", image_url);
-            let r = document.querySelector(':root');
-            r.style.setProperty('--deck-background-color', alt_color);
-            console.log("set deck background color", alt_color);
-        })
-        .catch(err => {
-            console.log("issue changing background", err);
-        })
+    let r = document.querySelector(':root');
+    r.style.setProperty('--deck-background-color', alt_color);
+    if (deck != undefined && deck != null) {
+        deck.set_background_image = deck.set_background_image || function() {};
+        deck.set_background_image(image_url, alt_color);
+    }
 }
 
 // assumes location of image is host:8080/deck-bg/deckname
 const BACKGROUND_IMAGE_PATH = window.location.pathname.replace("/deck/", "/deck-bg/")
-
-change_background(BACKGROUND_IMAGE_PATH, BACKGROUND_COLOR);
 
 deck = new Deck(DECK, stage);  // we need to pass the div element to style it (cursor)
 
@@ -213,6 +200,7 @@ deck.set_background_layer(background_layer);
 deck.set_interaction_layer(interaction_layer);
 deck.set_hardware_image_layer(hardware_layer);
 deck.set_image_layer(image_layer);
+change_background(BACKGROUND_IMAGE_PATH, BACKGROUND_COLOR);
 
 // does it have a dark image (later: check for dark background color as well)
 if (DARK) {
