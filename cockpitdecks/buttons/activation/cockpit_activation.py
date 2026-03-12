@@ -3,11 +3,12 @@ Button action and activation abstraction
 """
 
 import logging
+import os
 import random
 import subprocess
 
 from cockpitdecks.event import PushEvent
-from cockpitdecks import DECK_ACTIONS, CONFIG_KW, ID_SEP
+from cockpitdecks import DECK_ACTIONS, CONFIG_KW, ID_SEP, ENVIRON_KW
 from .activation import Activation
 
 # from ...cockpit import CockpitInstruction
@@ -272,8 +273,14 @@ class StartSimulator(Activation):
             if not event.pressed:  # os dependent
                 # 1. Should check it is already running, may be remote?
                 # 2. Start it locally at least:
-                # 2.a: build path from environ (SIM_HOME) and exe name (to be guesses or hardcoded)
-                p = subprocess.Popen(["open", "/Users/pierre/X-Plane 12/X-Plane.app"])
+                # 2.a: build path from environ (SIMULATOR_HOME) and exe name
+                sim_home = self.cockpit._environ.get(ENVIRON_KW.SIMULATOR_HOME.value)
+                if sim_home is None:
+                    sim_home = os.environ.get(ENVIRON_KW.SIMULATOR_HOME.value)
+                if sim_home is None:
+                    logger.error("cannot start simulator: SIMULATOR_HOME not set in environ")
+                    return False
+                p = subprocess.Popen(["open", sim_home])
 
         return True  # normal termination
 

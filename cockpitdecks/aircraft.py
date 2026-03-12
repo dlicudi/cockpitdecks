@@ -565,20 +565,24 @@ class Aircraft:
                     self.decks[name] = self.all_deck_drivers[deck_driver][0](name=name, config=deck_config, cockpit=self.cockpit, device=device)
                     logger.info(f"create_decks deck {name}: construct/start took {(time.perf_counter() - construct_started_at) * 1000.0:.1f}ms")
                     if deck_driver == VIRTUAL_DECK_DRIVER:
-                        deck_flat = self.deck_types.get(deck_type).desc()
-                        if DECK_KW.BACKGROUND.value in deck_flat and DECK_KW.IMAGE.value in deck_flat[DECK_KW.BACKGROUND.value]:
-                            background = deck_flat[DECK_KW.BACKGROUND.value]
-                            fn = background[DECK_KW.IMAGE.value]
-                            if self.deck_types.get(deck_type)._aircraft:
-                                if not fn.startswith(AIRCRAFT_ASSET_PATH):
-                                    background[DECK_KW.IMAGE.value] = AIRCRAFT_ASSET_PATH + fn
-                            else:
-                                if not fn.startswith(COCKPITDECKS_ASSET_PATH):
-                                    background[DECK_KW.IMAGE.value] = COCKPITDECKS_ASSET_PATH + fn
-                        self.virtual_decks[name] = deck_config | {
-                            DECK_TYPE_ORIGINAL: self.deck_types.get(deck_type).store,
-                            DECK_TYPE_DESCRIPTION: deck_flat,
-                        }
+                        deck_type_obj = self.deck_types.get(deck_type)
+                        if deck_type_obj is None:
+                            logger.error(f"deck type {deck_type} not found, skipping virtual deck setup for {name}")
+                        else:
+                            deck_flat = deck_type_obj.desc()
+                            if DECK_KW.BACKGROUND.value in deck_flat and DECK_KW.IMAGE.value in deck_flat[DECK_KW.BACKGROUND.value]:
+                                background = deck_flat[DECK_KW.BACKGROUND.value]
+                                fn = background[DECK_KW.IMAGE.value]
+                                if deck_type_obj._aircraft:
+                                    if not fn.startswith(AIRCRAFT_ASSET_PATH):
+                                        background[DECK_KW.IMAGE.value] = AIRCRAFT_ASSET_PATH + fn
+                                else:
+                                    if not fn.startswith(COCKPITDECKS_ASSET_PATH):
+                                        background[DECK_KW.IMAGE.value] = COCKPITDECKS_ASSET_PATH + fn
+                            self.virtual_decks[name] = deck_config | {
+                                DECK_TYPE_ORIGINAL: deck_type_obj.store,
+                                DECK_TYPE_DESCRIPTION: deck_flat,
+                            }
                     cnt = cnt + 1
                     deck_layout = deck_config.get(DECK_KW.LAYOUT.value, DEFAULT_LAYOUT)
                     logger.info(f"deck {name} added ({deck_type}, driver {deck_driver}, layout {deck_layout})")

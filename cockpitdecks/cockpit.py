@@ -14,6 +14,7 @@ import itertools
 import re
 import time
 import tempfile
+import subprocess
 
 from queue import Queue
 from typing import Dict, Tuple, Set
@@ -402,7 +403,7 @@ class CockpitPlaySoundInstruction(CockpitInstruction):
 
     def _execute(self):
         if self.sound is not None:
-            os.system(self.sound)
+            subprocess.run(self.sound.split(), check=False)
         else:
             logger.warning("no sound to play")
 
@@ -2390,7 +2391,13 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
         logger.info(f"registered deck {deck}")
 
     def is_closed(self, ws):
-        return ws.__dict__.get("environ").get("werkzeug.socket").fileno() < 0  # there must be a better way to do this...
+        environ = ws.__dict__.get("environ")
+        if environ is None:
+            return True
+        sock = environ.get("werkzeug.socket")
+        if sock is None:
+            return True
+        return sock.fileno() < 0  # there must be a better way to do this...
 
     def remove_client(self, websocket):
         # we unfortunately have to scan all decks to find the ws to remove
