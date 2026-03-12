@@ -637,6 +637,7 @@ class DeckWithIcons(Deck):
 
     def __init__(self, name: str, config: dict, cockpit: "Cockpit", device=None):
         Deck.__init__(self, name=name, config=config, cockpit=cockpit, device=device)
+        self._bg_cache = {}
 
     def get_default_icon(self):
         icons = self.cockpit.icons
@@ -726,13 +727,18 @@ class DeckWithIcons(Deck):
 
         image = None
         if use_texture and texture_in is not None:
+            cache_key = (texture_in, width, height)
+            cached = self._bg_cache.get(cache_key)
+            if cached is not None:
+                return cached.copy()
             image = self.cockpit.get_icon_image(texture_in)
 
         if image is not None:  # found a texture as requested
             logger.debug(f"{who}: use texture {texture_in}")
             image = image.resize((width, height))
+            self._bg_cache[cache_key] = image
             # self.inc(COCKPITDECKS_INTVAR.RENDER_BG_TEXTURE.value)
-            return image
+            return image.copy()
         if use_texture and texture_in is None:
             logger.debug(f"{who}: should use texture but no texture found, using uniform color")
         # texture = get_texture()

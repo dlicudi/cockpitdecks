@@ -148,9 +148,9 @@ class IconBase(Representation):
                 pologon = ((c, c), (c, c - s), (c - s, c), (c, c))
                 draw.polygon(pologon, fill="red", outline="white")
 
-        return self.overlay_text_new(image, self._label)
+        return self.overlay_text_new(image, self._label, already_copied=needs_copy)
 
-    def overlay_text_new(self, image, text: TextWithVariables):
+    def overlay_text_new(self, image, text: TextWithVariables, already_copied: bool = False):
         if text is None:
             logger.debug(f"button {self.button_name}: no text to lay over")
             return image
@@ -162,7 +162,8 @@ class IconBase(Representation):
             logger.debug(f"button {self.button_name}: no text")
             return image
 
-        image = image.copy()  # we will add text over it
+        if not already_copied:
+            image = image.copy()  # we will add text over it
 
         text_size = int(text.size * image.width / 72) if text.prefix == CONFIG_KW.LABEL.value else int(text.size)
         text_font = text.font
@@ -308,7 +309,7 @@ class Icon(IconBase):
                 pologon = ((c, c), (c, c - s), (c - s, c), (c, c))
                 draw.polygon(pologon, fill="red", outline="white")
 
-        return self.overlay_text_new(image, self._label)
+        return self.overlay_text_new(image, self._label, already_copied=needs_copy)
 
     def get_framed_icon(self):
         # We assume self.frame is a non null dict

@@ -101,6 +101,10 @@ class Button(VariableListener, SimulatorVariableValueProvider, StateVariableValu
         #### Options
         #
         self.options = parse_options(config.get(CONFIG_KW.OPTIONS.value))
+        self._options_dict = {}
+        for opt in self.options:
+            parts = opt.split("=", 1)
+            self._options_dict[parts[0].strip()] = parts[1] if len(parts) > 1 else True
         self.managed = None
         self.guarded = None
 
@@ -437,22 +441,11 @@ class Button(VariableListener, SimulatorVariableValueProvider, StateVariableValu
 
     def has_option(self, option):
         # Check whether a button has an option.
-        for opt in self.options:
-            if opt.split("=")[0].strip() == option:
-                return True
-        return False
+        return option in self._options_dict
 
     def option_value(self, option, default=None):
         # Return the value of an option or the supplied default value.
-        for opt in self.options:
-            opt = opt.split("=")
-            name = opt[0]
-            if name == option:
-                if len(opt) > 1:
-                    return opt[1]
-                else:  # found just the name, so it may be a boolean, True if present
-                    return True
-        return default
+        return self._options_dict.get(option, default)
 
     def parse_dataref_array(self, path):
         """Transform path[4:6] in to [ path[4], path[5] ]"""
