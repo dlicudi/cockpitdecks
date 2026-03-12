@@ -13,6 +13,7 @@ import json
 import itertools
 import re
 import time
+import tempfile
 
 from queue import Queue
 from typing import Dict, Tuple, Set
@@ -109,7 +110,10 @@ if LOGFILE is not None:
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
-EVENTLOGFILE = "events.json"
+RUNTIME_LOG_DIR = os.path.join(tempfile.gettempdir(), "cockpitdecks")
+os.makedirs(RUNTIME_LOG_DIR, exist_ok=True)
+
+EVENTLOGFILE = os.path.join(RUNTIME_LOG_DIR, "events.json")
 event_logger = logging.getLogger("events")
 if EVENTLOGFILE is not None:
     formatter = logging.Formatter('{"ts": "%(asctime)s", "event": %(message)s}')
