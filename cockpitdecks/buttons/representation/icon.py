@@ -124,50 +124,29 @@ class IconBase(Representation):
             logger.warning(f"button {self.button_name}: {type(self).__name__} no image")
             return None
 
+        needs_copy = self.button.has_option("placeholder") or not self.is_valid() or (self.button._activation is not None and not self.button._activation.is_valid())
+        if needs_copy:
+            image = image.copy()
+            draw = ImageDraw.Draw(image)
+            c = round(0.97 * image.width)
+
         if self.button.has_option("placeholder"):
             # Add little blue check mark if placeholder
-            image = image.copy()  # we will add text over it
-            draw = ImageDraw.Draw(image)
-            c = round(0.97 * image.width)  # % from edge
-            s = round(0.10 * image.width)  # size
-            pologon = ((c, c), (c, c - s), (c - s, c), (c, c))  # lower right corner
+            s = round(0.10 * image.width)
+            pologon = ((c, c), (c, c - s), (c - s, c), (c, c))
             draw.polygon(pologon, fill="deepskyblue")
         else:
-            # Button is invalid, add a little red mark
-            # if not self.button.is_valid():
-            #     image = image.copy()  # we will add text over it
-            #     draw = ImageDraw.Draw(image)
-            #     c = round(0.97 * image.width)  # % from edge
-            #     s = round(0.10 * image.width)  # size
-            #     pologon = ( (c, c), (c, c-s), (c-s, c), (c, c) )  # lower right corner
-            #     draw.polygon(pologon, fill="red", outline="white")
-
             # Representation is invalid, add a little orange mark
             if not self.is_valid():
-                image = image.copy()  # we will add text over it
-                draw = ImageDraw.Draw(image)
-                c = round(0.97 * image.width)  # % from edge
-                s = round(0.15 * image.width)  # size
-                pologon = ((c, c), (c, c - s), (c - s, c), (c, c))  # lower right corner
+                s = round(0.15 * image.width)
+                pologon = ((c, c), (c, c - s), (c - s, c), (c, c))
                 draw.polygon(pologon, fill="orange")
 
             # Activation is invalid, add a little red mark (may be on top of above mark...)
             if self.button._activation is not None and not self.button._activation.is_valid():
-                image = image.copy()  # we will add text over it
-                draw = ImageDraw.Draw(image)
-                c = round(0.97 * image.width)  # % from edge
-                s = round(0.08 * image.width)  # size
-                pologon = ((c, c), (c, c - s), (c - s, c), (c, c))  # lower right corner
+                s = round(0.08 * image.width)
+                pologon = ((c, c), (c, c - s), (c - s, c), (c, c))
                 draw.polygon(pologon, fill="red", outline="white")
-
-        # Add little check mark if not valid/fake
-        # if self.button._config.get("type", "none") == "none":
-        #     image = image.copy()  # we will add text over it
-        #     draw = ImageDraw.Draw(image)
-        #     c1 = round(0.03 * image.width)  # % from edge
-        #     s = round(0.1 * image.width)   # size
-        #     pologon = ( (c1, image.height-c1), (c1, image.height-c1-s), (c1+s, image.height-c1), ((c1, image.height-c1)) )  # lower left corner
-        #     draw.polygon(pologon, fill="orange", outline="white")
 
         return self.overlay_text_new(image, self._label)
 
@@ -183,6 +162,8 @@ class IconBase(Representation):
             logger.debug(f"button {self.button_name}: no text")
             return image
 
+        image = image.copy()  # we will add text over it
+
         text_size = int(text.size * image.width / 72) if text.prefix == CONFIG_KW.LABEL.value else int(text.size)
         text_font = text.font
         if self.button.is_managed() and text.prefix == CONFIG_KW.TEXT.value:
@@ -191,7 +172,6 @@ class IconBase(Representation):
                 text_font = "AirbusFCU"  # hardcoded
 
         font = self.get_font(text_font, text_size)
-        image = image.copy()  # we will add text over it
         draw = ImageDraw.Draw(image)
         inside = round(0.04 * image.width + 0.5)
         w = image.width / 2
@@ -304,50 +284,29 @@ class Icon(IconBase):
             logger.warning(f"button {self.button_name}: {type(self).__name__} no image")
             return None
 
+        needs_copy = self.button.has_option("placeholder") or not self.is_valid() or (self.button._activation is not None and not self.button._activation.is_valid())
+        if needs_copy:
+            image = image.copy()
+            draw = ImageDraw.Draw(image)
+            c = round(0.97 * image.width)
+
         if self.button.has_option("placeholder"):
             # Add little blue check mark if placeholder
-            image = image.copy()  # we will add text over it
-            draw = ImageDraw.Draw(image)
-            c = round(0.97 * image.width)  # % from edge
-            s = round(0.10 * image.width)  # size
-            pologon = ((c, c), (c, c - s), (c - s, c), (c, c))  # lower right corner
+            s = round(0.10 * image.width)
+            pologon = ((c, c), (c, c - s), (c - s, c), (c, c))
             draw.polygon(pologon, fill="deepskyblue")
         else:
-            # Button is invalid, add a little red mark
-            # if not self.button.is_valid():
-            #     image = image.copy()  # we will add text over it
-            #     draw = ImageDraw.Draw(image)
-            #     c = round(0.97 * image.width)  # % from edge
-            #     s = round(0.10 * image.width)  # size
-            #     pologon = ( (c, c), (c, c-s), (c-s, c), (c, c) )  # lower right corner
-            #     draw.polygon(pologon, fill="red", outline="white")
-
             # Representation is invalid, add a little orange mark
             if not self.is_valid():
-                image = image.copy()  # we will add text over it
-                draw = ImageDraw.Draw(image)
-                c = round(0.97 * image.width)  # % from edge
-                s = round(0.15 * image.width)  # size
-                pologon = ((c, c), (c, c - s), (c - s, c), (c, c))  # lower right corner
+                s = round(0.15 * image.width)
+                pologon = ((c, c), (c, c - s), (c - s, c), (c, c))
                 draw.polygon(pologon, fill="orange")
 
             # Activation is invalid, add a little red mark (may be on top of above mark...)
             if self.button._activation is not None and not self.button._activation.is_valid():
-                image = image.copy()  # we will add text over it
-                draw = ImageDraw.Draw(image)
-                c = round(0.97 * image.width)  # % from edge
-                s = round(0.08 * image.width)  # size
-                pologon = ((c, c), (c, c - s), (c - s, c), (c, c))  # lower right corner
+                s = round(0.08 * image.width)
+                pologon = ((c, c), (c, c - s), (c - s, c), (c, c))
                 draw.polygon(pologon, fill="red", outline="white")
-
-        # Add little check mark if not valid/fake
-        # if self.button._config.get("type", "none") == "none":
-        #     image = image.copy()  # we will add text over it
-        #     draw = ImageDraw.Draw(image)
-        #     c1 = round(0.03 * image.width)  # % from edge
-        #     s = round(0.1 * image.width)   # size
-        #     pologon = ( (c1, image.height-c1), (c1, image.height-c1-s), (c1+s, image.height-c1), ((c1, image.height-c1)) )  # lower left corner
-        #     draw.polygon(pologon, fill="orange", outline="white")
 
         return self.overlay_text_new(image, self._label)
 
