@@ -91,7 +91,7 @@ class Page:
 
     def get_button_value(self, name):
         a = name.split(ID_SEP)
-        if len(a) > 0:
+        if len(a) > 1:
             if a[0] == self.name:
                 b = a[1].split(":")  # button-name:variable-name
                 if b[0] in self.button_names.keys():

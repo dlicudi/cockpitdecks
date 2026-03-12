@@ -1269,12 +1269,12 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
 
     def get_button_value(self, name):
         a = name.split(ID_SEP)
-        if len(a) > 0:
+        if len(a) > 1:
             if a[0] == self.name:
                 if a[1] in self.decks.keys():
                     return self.decks[a[1]].get_button_value(ID_SEP.join(a[1:]))
                 else:
-                    logger.warning(f"so such deck {a[1]}")
+                    logger.warning(f"no such deck {a[1]}")
             else:
                 logger.warning(f"no such cockpit {a[0]}")
         else:
