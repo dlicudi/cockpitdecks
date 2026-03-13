@@ -193,7 +193,11 @@ class DeckEvent(Event):
 
     def enqueue(self):
         if self.deck is not None:
-            self.deck.cockpit.event_queue.put(self)
+            cockpit = self.deck.cockpit
+            if hasattr(cockpit, "enqueue_priority_event"):
+                cockpit.enqueue_priority_event(self)
+            else:
+                cockpit.event_queue.put(self)
         else:
             logger.warning("no deck")
 

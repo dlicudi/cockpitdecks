@@ -48,6 +48,7 @@ class LoadPage(Activation):
         "page": {"type": "string", "prompt": "Page", "default-value": "back", "mandatory": True},
         "deck": {"type": "string", "prompt": "Remote deck"},
     }
+    SKIP_OLD_PAGE_RENDER = True
 
     def __init__(self, button: "Button"):
         Activation.__init__(self, button=button)

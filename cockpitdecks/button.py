@@ -709,6 +709,7 @@ class Button(VariableListener, SimulatorVariableValueProvider, StateVariableValu
             return False
 
         logger.log(SPAM_LEVEL, f"ACTIVATE {self.name} ({event})")
+        page_before_activation = self.deck.current_page if self.deck is not None else None
         if self._activation is not None:
             if not self._activation.is_valid():
                 logger.warning(f"button {self.name}: activation is not valid, nothing executed")
@@ -723,6 +724,9 @@ class Button(VariableListener, SimulatorVariableValueProvider, StateVariableValu
         else:
             logger.debug(f"button {self.name}: no activation")
 
+        page_changed = self.deck is not None and self.deck.current_page is not page_before_activation
+        skip_old_page_render = page_changed and getattr(self._activation, "SKIP_OLD_PAGE_RENDER", False)
+
         self.value = self.compute_value()
         self._value.save()  # write set-dataref with the button value and cascade effects
 
@@ -731,10 +735,15 @@ class Button(VariableListener, SimulatorVariableValueProvider, StateVariableValu
                 SPAM_LEVEL,
                 f"activate: button {self.name}: {self.previous_value} -> {self.current_value}",
             )
-            self.request_render()
+            if skip_old_page_render:
+                logger.debug(f"button {self.name}: skipping render after page change")
+            else:
+                self.request_render()
         else:
             logger.debug(f"button {self.name}: no change")
-            if self.deck.is_virtual_deck() or always_render():  # representation has not changed, but hardware representation might have
+            if skip_old_page_render:
+                logger.debug(f"button {self.name}: skipping unchanged render after page change")
+            elif self.deck.is_virtual_deck() or always_render():  # representation has not changed, but hardware representation might have
                 self.request_render()
         return True
 
