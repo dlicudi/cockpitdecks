@@ -173,6 +173,15 @@ class AnnunciatorPart:
         logger.debug(f"button {self.annunciator.button.name}: no invert color, returning {DEFAULT_INVERT_COLOR}")
         return convert_color(DEFAULT_INVERT_COLOR)
 
+    def explicit_light_off_intensity(self):
+        for config in (self._config, self.annunciator.annunciator, self.annunciator.button._config):
+            if isinstance(config, dict) and "light-off-intensity" in config:
+                return config.get("light-off-intensity")
+        return None
+
+    def renders_unlit(self) -> bool:
+        return self.explicit_light_off_intensity() is not None or "off-color" in self._config
+
     def get_led(self):
         return self._config.get("led")
 
@@ -191,7 +200,9 @@ class AnnunciatorPart:
         before = color
         if not self.is_lit:
             try:
-                lux = self.annunciator.button.get_attribute("light-off-intensity")
+                lux = self.explicit_light_off_intensity()
+                if lux is None:
+                    lux = self.annunciator.button.get_attribute("light-off-intensity")
                 dimmed = light_off(color, lightness=lux / 100)
                 color = self._config.get("off-color")
                 if color is None:
@@ -254,7 +265,8 @@ class AnnunciatorPart:
             font = self.annunciator.get_font(self._display.font, self._display.size)
             font_duration_ms = (time.perf_counter() - font_started_at) * 1000.0
 
-            if state["lit"] or not self.annunciator.annunciator_style == ANNUNCIATOR_STYLES.VIVISUN:
+            should_render = state["lit"] or self.annunciator.annunciator_style != ANNUNCIATOR_STYLES.VIVISUN or self.renders_unlit()
+            if should_render:
                 if state["lit"] and state["invert"]:
                     frame = (
                         (
@@ -336,7 +348,8 @@ class AnnunciatorPart:
             logger.warning(f"button {self.annunciator.button.name}: part {self.name}: no text, no led")
             return
 
-        if state["lit"] or not self.annunciator.annunciator_style == ANNUNCIATOR_STYLES.VIVISUN:
+        should_render = state["lit"] or self.annunciator.annunciator_style != ANNUNCIATOR_STYLES.VIVISUN or self.renders_unlit()
+        if should_render:
             ninside = 6
             if led in [ANNUNCIATOR_LED.BLOCK.value, ANNUNCIATOR_LED.LED.value]:
                 LED_BLOC_HEIGHT = int(self.height() / 2)
