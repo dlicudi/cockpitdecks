@@ -16,7 +16,7 @@ import time
 import tempfile
 import subprocess
 
-from queue import Queue
+from queue import Empty, Queue
 from typing import Dict, Tuple, Set
 from datetime import datetime
 
@@ -613,6 +613,7 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
         self.event_loop_run = False
         self.event_loop_thread = None
         self.event_queue = Queue()
+        self.priority_event_queue = Queue()
         self._event_loop_peak_queue = 0
         self._dirty_buttons = {}
         self._dirty_buttons_lock = threading.Lock()
@@ -2045,8 +2046,14 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
         logger.debug("starting event loop..")
 
         while self.event_loop_run:
-            e = self.event_queue.get()  # blocks infinitely here
-            queue_depth = self.event_queue.qsize()
+            try:
+                e = self.priority_event_queue.get_nowait()
+            except Empty:
+                try:
+                    e = self.event_queue.get(timeout=0.05)
+                except Empty:
+                    continue
+            queue_depth = self.priority_event_queue.qsize() + self.event_queue.qsize()
 
             if type(e) is str:
                 if e == "terminate":
@@ -2076,6 +2083,19 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
             self.flush_dirty_buttons()
 
         logger.debug(".. event loop ended")
+
+    def enqueue_priority_event(self, event):
+        self.priority_event_queue.put(event)
+
+    def drop_dirty_buttons_for_page(self, page):
+        if page is None:
+            return
+        button_ids = {button.get_id() for button in page.buttons.values()}
+        if not button_ids:
+            return
+        with self._dirty_buttons_lock:
+            for button_id in button_ids:
+                self._dirty_buttons.pop(button_id, None)
 
     def mark_button_dirty(self, button):
         with self._dirty_buttons_lock:

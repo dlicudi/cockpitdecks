@@ -393,6 +393,7 @@ class Deck(ABC):
         logger.debug(f"deck {self.name} changing page to {page}..")
         if page in self.pages.keys():
             if self.current_page is not None:
+                self.cockpit.drop_dirty_buttons_for_page(self.current_page)
                 logger.debug(f"deck {self.name} unloading page {self.current_page.name}..")
                 logger.debug("..unloading simulator variables..")
                 self.cockpit.sim.remove_simulator_variables_to_monitor(
@@ -402,8 +403,6 @@ class Deck(ABC):
                 self.current_page.detach_simulator_variable_listeners()
                 logger.debug("..cleaning page..")
                 self.current_page.clean()
-                logger.debug(f"..reset device {self.name}..")
-                self.device.reset()
             logger.debug(f"deck {self.name} ..installing new page {page}..")
             self.inc(COCKPITDECKS_INTVAR.PAGE_CHANGES.value)
             self.previous_page = self.current_page
