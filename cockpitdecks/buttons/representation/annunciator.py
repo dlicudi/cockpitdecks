@@ -179,8 +179,14 @@ class AnnunciatorPart:
                 return config.get("light-off-intensity")
         return None
 
+    def light_off_intensity(self):
+        lux = self.explicit_light_off_intensity()
+        if lux is not None:
+            return lux
+        return self.annunciator.button.get_attribute("light-off-intensity")
+
     def renders_unlit(self) -> bool:
-        return self.explicit_light_off_intensity() is not None or "off-color" in self._config
+        return self.light_off_intensity() is not None or "off-color" in self._config
 
     def get_led(self):
         return self._config.get("led")
@@ -200,9 +206,7 @@ class AnnunciatorPart:
         before = color
         if not self.is_lit:
             try:
-                lux = self.explicit_light_off_intensity()
-                if lux is None:
-                    lux = self.annunciator.button.get_attribute("light-off-intensity")
+                lux = self.light_off_intensity()
                 dimmed = light_off(color, lightness=lux / 100)
                 color = self._config.get("off-color")
                 if color is None:
