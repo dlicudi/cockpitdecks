@@ -1437,6 +1437,7 @@ class EncoderToggle(Activation, EncoderProperties):
         # Internal variables
         self.longpush = True
         self._on = True
+        self._toggle_initialized = False
 
     def num_commands(self):
         return len(self._commands) if self._commands is not None else 0
@@ -1447,9 +1448,24 @@ class EncoderToggle(Activation, EncoderProperties):
             return False
         return True  # super().is_valid()
 
+    def _update_toggle_variable(self, cascade: bool = True):
+        try:
+            self.button.sim.set_internal_variable(
+                name=self.button.name + "-toggle",
+                value=1.0 if self._on else 0.0,
+                cascade=cascade,
+            )
+            self._toggle_initialized = True
+            logger.info(f"button {self.button_name}: toggle={'ON' if self._on else 'OFF'} (data:{self.button.name}-toggle={1.0 if self._on else 0.0})")
+        except Exception:
+            logger.warning(f"button {self.button_name}: could not set toggle variable", exc_info=True)
+
     def activate(self, event) -> bool:
         if not self.can_handle(event):
             return False
+
+        if not self._toggle_initialized:
+            self._update_toggle_variable(cascade=False)
 
         if type(event) is PushEvent:
             if not super().activate(event):
@@ -1458,6 +1474,7 @@ class EncoderToggle(Activation, EncoderProperties):
                 self._on = False
             elif event.pressed and not self._on:
                 self._on = True
+            self._update_toggle_variable()
             return True
 
         self.inc(COCKPITDECKS_INTVAR.ACTIVATION_COUNT.value)  # since super() not called
