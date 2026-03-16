@@ -7,9 +7,11 @@ import os
 import random
 import subprocess
 
-from cockpitdecks.event import PushEvent
+from cockpitdecks.event import EncoderEvent, PushEvent
 from cockpitdecks import DECK_ACTIONS, CONFIG_KW, ID_SEP, ENVIRON_KW
+from cockpitdecks.resources.intvariables import COCKPITDECKS_INTVAR
 from .activation import Activation
+from .deck_activation import EncoderProperties
 
 # from ...cockpit import CockpitInstruction
 
@@ -82,6 +84,101 @@ class LoadPage(Activation):
         """
         deck = f"deck {self.remote_deck}" if self.remote_deck is not None else "the current deck"
         return "\n\r".join([f"The button loads page {self.page} on {deck}."])
+
+
+class LoadPageCycle(Activation, EncoderProperties):
+    """
+    Defines a Page cycle activation for encoders.
+    Rotating the encoder cycles through a defined list of pages.
+    Pushing the encoder loads the first page in the list (home).
+    """
+
+    ACTIVATION_NAME = "page-cycle"
+    REQUIRED_DECK_ACTIONS = [DECK_ACTIONS.ENCODER, DECK_ACTIONS.PRESS, DECK_ACTIONS.LONGPRESS, DECK_ACTIONS.PUSH]
+
+    PARAMETERS = {
+        "pages": {"type": "list", "prompt": "Pages to cycle through", "mandatory": True},
+        "deck": {"type": "string", "prompt": "Remote deck"},
+    }
+    SKIP_OLD_PAGE_RENDER = True
+
+    def __init__(self, button: "Button"):
+        Activation.__init__(self, button=button)
+        EncoderProperties.__init__(self, button=button)
+
+        self.pages = self._config.get("pages", [])
+        self.remote_deck = self._config.get("deck")
+        self._page_index = 0
+
+    @property
+    def deck_name(self):
+        return self.remote_deck if self.remote_deck is not None else self.button.deck.name
+
+    def _make_page_instruction(self, page: str):
+        return self.cockpit.instruction_factory(
+            name=INSTRUCTION_PREFIX + "page",
+            instruction_block={"page": page, "deck": self.deck_name},
+        )
+
+    def _current_page_index(self) -> int:
+        """Find current page in cycle list, defaulting to 0."""
+        deck = self.cockpit.decks.get(self.deck_name)
+        if deck is not None and deck.current_page is not None:
+            current = deck.current_page.name
+            if current in self.pages:
+                return self.pages.index(current)
+        return self._page_index
+
+    def is_valid(self):
+        if not self.pages or len(self.pages) < 2:
+            logger.warning(f"button {self.button_name}: {type(self).__name__} needs at least 2 pages")
+            return False
+        return super().is_valid()
+
+    def activate(self, event) -> bool:
+        if not self.can_handle(event):
+            return False
+        if not super().activate(event):
+            return False
+
+        if isinstance(event, EncoderEvent):
+            idx = self._current_page_index()
+            if event.turned_clockwise:
+                idx = (idx + 1) % len(self.pages)
+                self.inc(COCKPITDECKS_INTVAR.ENCODER_TURNS.value, 1)
+                self.inc(COCKPITDECKS_INTVAR.ENCODER_CLOCKWISE.value)
+            elif event.turned_counter_clockwise:
+                idx = (idx - 1) % len(self.pages)
+                self.inc(COCKPITDECKS_INTVAR.ENCODER_TURNS.value, -1)
+                self.inc(COCKPITDECKS_INTVAR.ENCODER_COUNTER_CLOCKWISE.value)
+            self._page_index = idx
+            self._make_page_instruction(self.pages[idx]).execute()
+
+        elif isinstance(event, PushEvent):
+            if event.pressed:
+                self._page_index = 0
+                self._make_page_instruction(self.pages[0]).execute()
+
+        return True
+
+    def get_activation_value(self):
+        return self._turns
+
+    def get_state_variables(self) -> dict:
+        a = {
+            COCKPITDECKS_INTVAR.ENCODER_CLOCKWISE.value: self._cw,
+            COCKPITDECKS_INTVAR.ENCODER_COUNTER_CLOCKWISE.value: self._ccw,
+            COCKPITDECKS_INTVAR.ENCODER_TURNS.value: self._turns,
+            "page_index": self._page_index,
+        }
+        return a | super().get_state_variables()
+
+    def describe(self) -> str:
+        deck = f"deck {self.remote_deck}" if self.remote_deck is not None else "the current deck"
+        return "\n\r".join([
+            f"This encoder cycles through pages {', '.join(self.pages)} on {deck}.",
+            f"Pushing the encoder loads the first page ({self.pages[0] if self.pages else 'none'}).",
+        ])
 
 
 class Reload(Activation):
