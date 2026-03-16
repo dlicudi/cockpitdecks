@@ -98,17 +98,27 @@ class LoadPageCycle(Activation, EncoderProperties):
 
     PARAMETERS = {
         "pages": {"type": "list", "prompt": "Pages to cycle through", "mandatory": True},
+        "page-labels": {"type": "list", "prompt": "Display labels for pages"},
         "deck": {"type": "string", "prompt": "Remote deck"},
     }
     SKIP_OLD_PAGE_RENDER = True
+
+    CURRENT_PAGE_VAR = "cockpitdecks/page_cycle/current_page"
 
     def __init__(self, button: "Button"):
         Activation.__init__(self, button=button)
         EncoderProperties.__init__(self, button=button)
 
         self.pages = self._config.get("pages", [])
+        self.page_labels = self._config.get("page-labels", self.pages)
         self.remote_deck = self._config.get("deck")
         self._page_index = 0
+
+        # Register page label mapping on the deck so change_page can use it
+        deck = self.button.deck
+        for i, page in enumerate(self.pages):
+            label = self.page_labels[i] if i < len(self.page_labels) else page
+            deck.page_label_map[page] = label
 
     @property
     def deck_name(self):
@@ -129,6 +139,17 @@ class LoadPageCycle(Activation, EncoderProperties):
                 return self.pages.index(current)
         return self._page_index
 
+    def _get_page_label(self, idx: int) -> str:
+        """Get display label for page at index."""
+        if idx < len(self.page_labels):
+            return self.page_labels[idx]
+        return self.pages[idx]
+
+    def _update_page_variable(self, idx: int):
+        """Update internal variable with current page label for display."""
+        var = self.sim.get_internal_variable(name=self.CURRENT_PAGE_VAR, is_string=True)
+        var.update_value(new_value=self._get_page_label(idx), cascade=True)
+
     def is_valid(self):
         if not self.pages or len(self.pages) < 2:
             logger.warning(f"button {self.button_name}: {type(self).__name__} needs at least 2 pages")
@@ -144,19 +165,24 @@ class LoadPageCycle(Activation, EncoderProperties):
         if isinstance(event, EncoderEvent):
             idx = self._current_page_index()
             if event.turned_clockwise:
-                idx = (idx + 1) % len(self.pages)
+                new_idx = min(idx + 1, len(self.pages) - 1)
                 self.inc(COCKPITDECKS_INTVAR.ENCODER_TURNS.value, 1)
                 self.inc(COCKPITDECKS_INTVAR.ENCODER_CLOCKWISE.value)
             elif event.turned_counter_clockwise:
-                idx = (idx - 1) % len(self.pages)
+                new_idx = max(idx - 1, 0)
                 self.inc(COCKPITDECKS_INTVAR.ENCODER_TURNS.value, -1)
                 self.inc(COCKPITDECKS_INTVAR.ENCODER_COUNTER_CLOCKWISE.value)
-            self._page_index = idx
-            self._make_page_instruction(self.pages[idx]).execute()
+            else:
+                return True
+            if new_idx != idx:
+                self._page_index = new_idx
+                self._update_page_variable(new_idx)
+                self._make_page_instruction(self.pages[new_idx]).execute()
 
         elif isinstance(event, PushEvent):
             if event.pressed:
                 self._page_index = 0
+                self._update_page_variable(0)
                 self._make_page_instruction(self.pages[0]).execute()
 
         return True

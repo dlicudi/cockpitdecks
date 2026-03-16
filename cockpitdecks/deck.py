@@ -66,6 +66,7 @@ class Deck(ABC):
         self.current_page: Page | None = None
         self.previous_page: Page | None = None
         self.page_history: List[str] = []
+        self.page_label_map: Dict[str, str] = {}  # page name -> display label, set by page-cycle activations
 
         self.brightness = int(config.get("brightness", 100))
 
@@ -408,6 +409,11 @@ class Deck(ABC):
             self.previous_page = self.current_page
             self.current_page = self.pages[page]
             self.page_history.append(self.current_page.name)
+            # Update page label variable for side screen display (used by page-cycle encoder)
+            if self.page_label_map:
+                label = self.page_label_map.get(page, page)
+                var = self.cockpit.sim.get_internal_variable(name="cockpitdecks/page_cycle/current_page", is_string=True)
+                var.update_value(new_value=label, cascade=True)
             logger.debug("..loading simulator variables..")
             self.cockpit.sim.add_simulator_variables_to_monitor(
                 simulator_variables=self.current_page.simulator_variables, reason=f"deck {self.name}, page {self.current_page.name}"
