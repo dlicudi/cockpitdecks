@@ -1439,6 +1439,15 @@ class EncoderToggle(Activation, EncoderProperties):
         self._on = True
         self._toggle_initialized = False
 
+        # Optional labels for toggle state display (e.g., ["1 MHz", "25 kHz"])
+        toggle_labels = self.button._config.get("toggle-labels")
+        if toggle_labels is not None and isinstance(toggle_labels, list) and len(toggle_labels) == 2:
+            self._on_label = str(toggle_labels[0])
+            self._off_label = str(toggle_labels[1])
+        else:
+            self._on_label = None
+            self._off_label = None
+
     def num_commands(self):
         return len(self._commands) if self._commands is not None else 0
 
@@ -1450,13 +1459,17 @@ class EncoderToggle(Activation, EncoderProperties):
 
     def _update_toggle_variable(self, cascade: bool = True):
         try:
+            if self._on_label is not None:
+                value = self._on_label if self._on else self._off_label
+            else:
+                value = 1.0 if self._on else 0.0
             self.button.sim.set_internal_variable(
                 name=self.button.name + "-toggle",
-                value=1.0 if self._on else 0.0,
+                value=value,
                 cascade=cascade,
             )
             self._toggle_initialized = True
-            logger.info(f"button {self.button_name}: toggle={'ON' if self._on else 'OFF'} (data:{self.button.name}-toggle={1.0 if self._on else 0.0})")
+            logger.info(f"button {self.button_name}: toggle={'ON' if self._on else 'OFF'} (data:{self.button.name}-toggle={value})")
         except Exception:
             logger.warning(f"button {self.button_name}: could not set toggle variable", exc_info=True)
 
@@ -1470,11 +1483,9 @@ class EncoderToggle(Activation, EncoderProperties):
         if type(event) is PushEvent:
             if not super().activate(event):
                 return False
-            if event.pressed and self._on:
-                self._on = False
-            elif event.pressed and not self._on:
-                self._on = True
-            self._update_toggle_variable()
+            if event.pressed:
+                self._on = not self._on
+                self._update_toggle_variable()
             return True
 
         self.inc(COCKPITDECKS_INTVAR.ACTIVATION_COUNT.value)  # since super() not called

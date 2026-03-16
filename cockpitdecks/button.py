@@ -383,6 +383,8 @@ class Button(VariableListener, SimulatorVariableValueProvider, StateVariableValu
             ref = self.sim.get_variable(d)  # creates or return already defined dataref
             if ref is not None:
                 ref.add_listener(self)
+                if Variable.is_internal_variable(d):
+                    logger.info(f"button {self.name}: registered as listener on internal variable {d} (listeners={len(ref.listeners)})")
             else:
                 logger.error(f"button {self.name}: failed to create dataref {d}")
 
@@ -680,6 +682,9 @@ class Button(VariableListener, SimulatorVariableValueProvider, StateVariableValu
             logger.error(f"button {self.name}: not a simulator or internal variable ({type(data).__name__})")
             return
 
+        if isinstance(data, InternalVariable):
+            logger.info(f"button {self.name}: internal variable {data.name} changed to {data.current_value}")
+
         logger.debug(f"button {self.name}: {data.name} changed")
 
         if data == self._value:
@@ -689,12 +694,16 @@ class Button(VariableListener, SimulatorVariableValueProvider, StateVariableValu
 
         self.value = self.compute_value()
         if self.has_changed():
+            if isinstance(data, InternalVariable):
+                logger.info(f"button {self.name}: internal var change detected, requesting render (prev={self.previous_value}, curr={self.current_value})")
             logger.log(
                 SPAM_LEVEL,
                 f"button {self.name}: {self.previous_value} -> {self.current_value}",
             )
             self.request_render()
         else:
+            if isinstance(data, InternalVariable):
+                logger.info(f"button {self.name}: internal var changed but has_changed()=False (prev={self.previous_value}, curr={self.current_value})")
             logger.debug(f"button {self.name}: no change")
 
     def activate(self, event) -> bool:

@@ -213,7 +213,13 @@ class Page:
     def attach_simulator_variable_listeners(self):
         for button in self.buttons.values():
             for d in button.get_variables():
+                if Variable.is_state_variable(d):
+                    continue
                 ref = self.simulator_variables.get(d)
+                if ref is None and Variable.is_internal_variable(d):
+                    # Internal variables are not stored in simulator_variables,
+                    # look them up directly from the simulator/cockpit variable database.
+                    ref = self.sim.get_variable(d)
                 if ref is not None:
                     ref.add_listener(button)
         logger.debug(f"page {self.name}: simulator variable listeners attached")
