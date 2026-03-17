@@ -2081,7 +2081,14 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
                 except:
                     logger.warning("..done with error", exc_info=True)
 
-            self.flush_dirty_buttons()
+            # Check the inline debounce for dirty buttons
+            now = time.monotonic()
+            with self._dirty_buttons_lock:
+                has_dirty = len(self._dirty_buttons) > 0
+                first_dirty = getattr(self, "_first_dirty_time", 0)
+
+            if has_dirty and (now - first_dirty) >= self.MINIMUM_FLUSH_DELAY_S:
+                self.flush_dirty_buttons()
 
         logger.debug(".. event loop ended")
 
@@ -2100,6 +2107,8 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
 
     def mark_button_dirty(self, button):
         with self._dirty_buttons_lock:
+            if not self._dirty_buttons:
+                self._first_dirty_time = time.monotonic()
             self._dirty_buttons[button.get_id()] = button
         self._schedule_dirty_flush_if_needed()
 
@@ -2107,21 +2116,20 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
         with self._dirty_buttons_lock:
             if not self._dirty_buttons:
                 return
-            now = time.monotonic()
-            dirty_buttons = []
-            next_due_at = None
-            for button_id, button in list(self._dirty_buttons.items()):
-                due_at = button.next_render_due_at()
-                if due_at <= now:
-                    dirty_buttons.append(button)
-                    del self._dirty_buttons[button_id]
-                else:
-                    next_due_at = due_at if next_due_at is None else min(next_due_at, due_at)
+            
+            # Take all dirty buttons at once
+            dirty_buttons = list(self._dirty_buttons.values())
+            self._dirty_buttons.clear()
 
         if not dirty_buttons:
-            if next_due_at is not None:
-                self._schedule_dirty_flush(delay_s=max(0.0, next_due_at - time.monotonic()))
             return
+
+        logger.warning(f"FLUSHING {len(dirty_buttons)} DIRTY BUTTONS: {[b.name for b in dirty_buttons]}")
+
+        decks_involved = {button.deck for button in dirty_buttons if button.deck is not None}
+        for deck in decks_involved:
+            if deck.device is not None and hasattr(deck.device, "begin_batch"):
+                deck.device.begin_batch()
 
         with ThreadPoolExecutor() as executor:
             futures = {executor.submit(button.render): button for button in dirty_buttons}
@@ -2131,42 +2139,19 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
                 except Exception:
                     logger.warning(f"button {futures[future].name}: problem during deferred rendering", exc_info=True)
 
+        for deck in decks_involved:
+            if deck.device is not None and hasattr(deck.device, "end_batch"):
+                deck.device.end_batch()
+
         self._schedule_dirty_flush_if_needed()
 
-    MINIMUM_FLUSH_DELAY_S = 0.020  # 20ms: let dataref batches from a single WS message accumulate before flushing
+    MINIMUM_FLUSH_DELAY_S = 0.200  # 200ms: let dataref batches from a single WS message accumulate before flushing
 
     def _schedule_dirty_flush_if_needed(self):
-        with self._dirty_buttons_lock:
-            if not self._dirty_buttons:
-                return
-            now = time.monotonic()
-            next_due_at = min(button.next_render_due_at() for button in self._dirty_buttons.values())
-        delay = max(self.MINIMUM_FLUSH_DELAY_S, next_due_at - now)
-        self._schedule_dirty_flush(delay_s=delay)
+        pass  # Inline debounce in event_loop handles this now without threads
 
     def _schedule_dirty_flush(self, delay_s: float):
-        with self._dirty_buttons_lock:
-            if self._dirty_flush_timer is not None and self._dirty_flush_timer.is_alive():
-                return
-
-            def enqueue_flush():
-                with self._dirty_buttons_lock:
-                    self._dirty_flush_timer = None
-                    self._dirty_flush_due_at = None
-                if self.event_loop_run:
-                    self.event_queue.put("flush-dirty")
-
-            due_at = time.monotonic() + delay_s
-            if self._dirty_flush_timer is not None and self._dirty_flush_timer.is_alive():
-                if self._dirty_flush_due_at is not None and self._dirty_flush_due_at <= due_at:
-                    return
-                self._dirty_flush_timer.cancel()
-
-            self._dirty_flush_due_at = due_at
-            self._dirty_flush_timer = threading.Timer(delay_s, enqueue_flush)
-            self._dirty_flush_timer.name = "Cockpit::Dirty Flush"
-            self._dirty_flush_timer.daemon = True
-            self._dirty_flush_timer.start()
+        pass  # Inline debounce in event_loop handles this now without threads
 
     def stop_event_loop(self):
         if self.event_loop_run:
