@@ -553,6 +553,9 @@ class Annunciator(DrawBase):
         self.annunciator_datarefs: List[SimulatorVariable] | None = None
         self.annunciator_datarefs = self.get_variables()
 
+        self._cached_render_states = None
+        self._cached_image = None
+
         DrawBase.__init__(self, button=button)
 
     def is_valid(self):
@@ -633,6 +636,13 @@ class Annunciator(DrawBase):
 
     def get_image_for_icon(self):
         total_started_at = time.perf_counter()
+
+        # Check render state cache: skip all PIL work if nothing changed
+        states = self.button.value if isinstance(self.button.value, dict) else self.get_current_values()
+        if self._cached_image is not None and states == self._cached_render_states:
+            logger.debug(f"button {self.button.name}: annunciator cache hit, skipping render")
+            return self._cached_image.copy()
+
         # If the part is not lit, a darker version is printed unless dark option is added to button
         # in which case nothing gets added to the button.
         # CONSTANTS
@@ -686,7 +696,6 @@ class Annunciator(DrawBase):
         guard_draw = ImageDraw.Draw(guard)
 
         parts_started_at = time.perf_counter()
-        states = self.button.value if isinstance(self.button.value, dict) else self.get_current_values()
         for part_name, part in self.annunciator_parts.items():
             part.render(draw, bgrd_draw, ICON_SIZE, annun_width, annun_height, inside, size, state=states.get(part_name))
         parts_duration_ms = (time.perf_counter() - parts_started_at) * 1000.0
@@ -787,6 +796,9 @@ class Annunciator(DrawBase):
 
         # PART 5: Label
         # Label will be added in Icon.get_image()
+        # Cache the rendered image and state for future comparisons
+        self._cached_render_states = states
+        self._cached_image = image.copy()
         return image
 
     def all_lit(self, on: bool):

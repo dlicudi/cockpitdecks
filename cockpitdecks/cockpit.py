@@ -8,6 +8,7 @@ import io
 import glob
 import base64
 import threading
+from concurrent.futures import ThreadPoolExecutor
 import pickle
 import json
 import itertools
@@ -2122,13 +2123,17 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
                 self._schedule_dirty_flush(delay_s=max(0.0, next_due_at - time.monotonic()))
             return
 
-        for button in dirty_buttons:
-            try:
-                button.render()
-            except:
-                logger.warning(f"button {button.name}: problem during deferred rendering", exc_info=True)
+        with ThreadPoolExecutor() as executor:
+            futures = {executor.submit(button.render): button for button in dirty_buttons}
+            for future in futures:
+                try:
+                    future.result()
+                except Exception:
+                    logger.warning(f"button {futures[future].name}: problem during deferred rendering", exc_info=True)
 
         self._schedule_dirty_flush_if_needed()
+
+    MINIMUM_FLUSH_DELAY_S = 0.020  # 20ms: let dataref batches from a single WS message accumulate before flushing
 
     def _schedule_dirty_flush_if_needed(self):
         with self._dirty_buttons_lock:
@@ -2136,7 +2141,8 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
                 return
             now = time.monotonic()
             next_due_at = min(button.next_render_due_at() for button in self._dirty_buttons.values())
-        self._schedule_dirty_flush(delay_s=max(0.0, next_due_at - now))
+        delay = max(self.MINIMUM_FLUSH_DELAY_S, next_due_at - now)
+        self._schedule_dirty_flush(delay_s=delay)
 
     def _schedule_dirty_flush(self, delay_s: float):
         with self._dirty_buttons_lock:

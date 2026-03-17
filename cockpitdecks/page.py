@@ -2,6 +2,7 @@
 #
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Dict
 
 from cockpitdecks import ID_SEP, DEFAULT_ATTRIBUTE_PREFIX
@@ -251,9 +252,11 @@ class Page:
         Renders this page on the deck
         """
         render_started_at = time.perf_counter()
-        for button in self.buttons.values():
-            button.render()
-            logger.debug(f"page {self.name}: button {button.name} rendered")
+        with ThreadPoolExecutor() as executor:
+            futures = {executor.submit(button.render): button for button in self.buttons.values()}
+            for future in futures:
+                future.result()
+                logger.debug(f"page {self.name}: button {futures[future].name} rendered")
 
         self.inc(COCKPITDECKS_INTVAR.PAGE_RENDER.value)
 
