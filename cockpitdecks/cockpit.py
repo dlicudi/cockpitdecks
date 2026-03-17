@@ -2050,7 +2050,7 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
                 e = self.priority_event_queue.get_nowait()
             except Empty:
                 try:
-                    e = self.event_queue.get(timeout=0.05)
+                    e = self.event_queue.get(timeout=0.01)
                 except Empty:
                     continue
             queue_depth = self.priority_event_queue.qsize() + self.event_queue.qsize()

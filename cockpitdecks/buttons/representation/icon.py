@@ -2,9 +2,15 @@
 All representations for Icon/image based.
 """
 
+import functools
 import logging
 
 from PIL import ImageDraw, ImageFont
+
+
+@functools.lru_cache(maxsize=256)
+def _cached_truetype(font_path: str, font_size: int):
+    return ImageFont.truetype(font_path, font_size)
 
 from cockpitdecks.resources.color import convert_color, has_ext, add_ext
 from cockpitdecks import CONFIG_KW, DECK_FEEDBACK
@@ -85,26 +91,26 @@ class IconBase(Representation):
         # 1. Tries button specific font
         f = try_ext(fontname)
         if f is not None:
-            return ImageFont.truetype(f, fontsize)
+            return _cached_truetype(f, fontsize)
 
         # 2. Tries default fonts
         default_font = self.button.get_attribute("label-font")
         if default_font is not None:
             f = try_ext(default_font)
             if f is not None:
-                return ImageFont.truetype(f, fontsize)
+                return _cached_truetype(f, fontsize)
 
         # 3. Returns first font, if any
         if len(fonts_available) > 0:
             f = all_fonts[fonts_available[0]]
             logger.warning(f"button {this_button} cockpit default label font not found in {fonts_available}. Returning first font found ({f})")
-            return ImageFont.truetype(f, fontsize)
+            return _cached_truetype(f, fontsize)
 
         # 5. Tries cockpit default font
         default_font = cockpit.default_font
         f = try_ext(default_font)
         if f is not None:
-            return ImageFont.truetype(f, fontsize)
+            return _cached_truetype(f, fontsize)
 
         logger.error("no font, using pillow default")
         return ImageFont.load_default()
@@ -261,13 +267,16 @@ class Icon(IconBase):
         super().clean_cache()
 
     def get_image_for_icon(self):
+        if self._icon_cache is not None:
+            return self._icon_cache.copy()
         deck = self.button.deck
         image = deck.cockpit.get_icon_image(self.icon)
         if image is None:
             image = self.button.deck.create_icon_for_key(index=self.button.index, colors=self.cockpit_color, texture=self.cockpit_texture)
         else:
             image = deck.scale_icon_for_key(self.button.index, image, name=self.icon)  # this will cache it in the deck as well
-        return image
+        self._icon_cache = image
+        return image.copy()
 
     def get_image(self):
         """
