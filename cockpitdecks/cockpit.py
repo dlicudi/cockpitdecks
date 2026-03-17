@@ -2047,39 +2047,42 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
         logger.debug("starting event loop..")
 
         while self.event_loop_run:
+            e = None
             try:
                 e = self.priority_event_queue.get_nowait()
             except Empty:
                 try:
                     e = self.event_queue.get(timeout=0.01)
                 except Empty:
-                    continue
-            queue_depth = self.priority_event_queue.qsize() + self.event_queue.qsize()
+                    pass  # fall through to debounce check
 
-            if type(e) is str:
-                if e == "terminate":
-                    self.stop_event_loop()
-                elif e == "reload":
-                    self.reload_decks(just_do_it=True)
-                elif e.startswith("reload:"):
-                    deck = e.replace("reload:", "")
-                    self.reload_deck(deck, just_do_it=True)
-                elif e == "stop":
-                    self.stop_decks(just_do_it=True)
-                elif e == "flush-dirty":
-                    logger.debug("flush dirty requested")
-                self.inc("event_count_" + e)
-            else:
-                try:
-                    logger.debug(f"doing {e}..")
-                    self.inc("event_count_" + type(e).__name__)
-                    if EVENTLOGFILE is not None and (LOG_SIMULATOR_VARIABLE_EVENTS or not isinstance(e, SimulatorEvent)) and not e.is_replay():
-                        # we do not enqueue events that are replayed
-                        event_logger.info(e.to_json())
-                    e.run(just_do_it=True)
-                    logger.debug("..done without error")
-                except:
-                    logger.warning("..done with error", exc_info=True)
+            if e is not None:
+                queue_depth = self.priority_event_queue.qsize() + self.event_queue.qsize()
+
+                if type(e) is str:
+                    if e == "terminate":
+                        self.stop_event_loop()
+                    elif e == "reload":
+                        self.reload_decks(just_do_it=True)
+                    elif e.startswith("reload:"):
+                        deck = e.replace("reload:", "")
+                        self.reload_deck(deck, just_do_it=True)
+                    elif e == "stop":
+                        self.stop_decks(just_do_it=True)
+                    elif e == "flush-dirty":
+                        logger.debug("flush dirty requested")
+                    self.inc("event_count_" + e)
+                else:
+                    try:
+                        logger.debug(f"doing {e}..")
+                        self.inc("event_count_" + type(e).__name__)
+                        if EVENTLOGFILE is not None and (LOG_SIMULATOR_VARIABLE_EVENTS or not isinstance(e, SimulatorEvent)) and not e.is_replay():
+                            # we do not enqueue events that are replayed
+                            event_logger.info(e.to_json())
+                        e.run(just_do_it=True)
+                        logger.debug("..done without error")
+                    except:
+                        logger.warning("..done with error", exc_info=True)
 
             # Check the inline debounce for dirty buttons
             now = time.monotonic()
