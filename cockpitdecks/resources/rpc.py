@@ -62,8 +62,16 @@ class RPC:
             elif token == "gt":  # test for >, pushes 1 if >, 0 otherwise
                 number2 = stack.pop()
                 stack.append(1 if (stack.pop() > number2) else 0)
-            elif token == "not":  # test for equality, pushes 1 if equal, 0 otherwise
+            elif token == "not":  # logical not, pushes 1 if zero else 0
                 stack.append(0 if stack.pop() != 0 else 1)
+            elif token == "or":  # logical or, pushes 1 if either nonzero else 0
+                n2 = stack.pop()
+                n1 = stack.pop()
+                stack.append(1 if (n1 != 0 or n2 != 0) else 0)
+            elif token == "and":  # logical and, pushes 1 if both nonzero else 0
+                n2 = stack.pop()
+                n1 = stack.pop()
+                stack.append(1 if (n1 != 0 and n2 != 0) else 0)
             elif token == "inf":  # inf is used as a keyword to return a special value
                 stack.append(math.inf)
             elif token == "cos":  # calculate cosine, input expected in degrees

@@ -620,6 +620,7 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
         self._dirty_buttons_lock = threading.Lock()
         self._dirty_flush_timer = None
         self._dirty_flush_due_at = None
+        self._render_executor = ThreadPoolExecutor(max_workers=12, thread_name_prefix="ButtonRender")
         self._event_loop_report_interval = 500
         self._event_loop_slow_event_ms = 50.0
         self._event_loop_events_since_report = 0
@@ -2084,14 +2085,7 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
                     except:
                         logger.warning("..done with error", exc_info=True)
 
-            # Check the inline debounce for dirty buttons
-            now = time.monotonic()
-            with self._dirty_buttons_lock:
-                has_dirty = len(self._dirty_buttons) > 0
-                first_dirty = getattr(self, "_first_dirty_time", 0)
-
-            if has_dirty and (now - first_dirty) >= self.MINIMUM_FLUSH_DELAY_S:
-                self.flush_dirty_buttons()
+            # Dirty button flushing is handled by _schedule_dirty_flush_if_needed() timer thread
 
         logger.debug(".. event loop ended")
 
@@ -2119,48 +2113,104 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
         with self._dirty_buttons_lock:
             if not self._dirty_buttons:
                 return
-            
+
             # Take all dirty buttons at once
             dirty_buttons = list(self._dirty_buttons.values())
+            wait_ms = (time.monotonic() - getattr(self, "_first_dirty_time", 0)) * 1000
             self._dirty_buttons.clear()
 
         if not dirty_buttons:
             return
 
-        logger.warning(f"FLUSHING {len(dirty_buttons)} DIRTY BUTTONS: {[b.name for b in dirty_buttons]}")
+        t_start = time.monotonic()
 
         decks_involved = {button.deck for button in dirty_buttons if button.deck is not None}
         for deck in decks_involved:
             if deck.device is not None and hasattr(deck.device, "begin_batch"):
                 deck.device.begin_batch()
 
-        with ThreadPoolExecutor() as executor:
-            futures = {executor.submit(button.render): button for button in dirty_buttons}
+        t_batch_start = time.monotonic()
+
+        render_times = {}
+        def timed_render(button):
+            t0 = time.monotonic()
+            button.render()
+            render_times[button.name] = (time.monotonic() - t0) * 1000
+
+        legs_buttons = [b for b in dirty_buttons if "LEGS" in b.name]
+        other_buttons = [b for b in dirty_buttons if b not in legs_buttons]
+
+        # Render LEGS buttons sequentially to avoid GIL contention in variable lookups.
+        for button in legs_buttons:
+            try:
+                timed_render(button)
+            except Exception:
+                logger.warning(f"button {button.name}: problem during deferred rendering", exc_info=True)
+
+        # Render other buttons in parallel.
+        executor = self._render_executor
+        if executor is not None and other_buttons:
+            futures = {executor.submit(timed_render, button): button for button in other_buttons}
             for future in futures:
                 try:
                     future.result()
                 except Exception:
                     logger.warning(f"button {futures[future].name}: problem during deferred rendering", exc_info=True)
 
+        t_render_done = time.monotonic()
+
         for deck in decks_involved:
             if deck.device is not None and hasattr(deck.device, "end_batch"):
                 deck.device.end_batch()
 
+        t_end = time.monotonic()
+
+        render_ms = (t_render_done - t_batch_start) * 1000
+        batch_ms = (t_end - t_render_done) * 1000
+        total_ms = (t_end - t_start) * 1000
+        per_button = " ".join(f"{name}={ms:.0f}ms" for name, ms in sorted(render_times.items(), key=lambda x: -x[1]))
+        logger.debug(
+            f"FLUSH {len(dirty_buttons)} buttons: wait={wait_ms:.0f}ms render={render_ms:.0f}ms "
+            f"usb_batch={batch_ms:.0f}ms total={total_ms:.0f}ms | {per_button}"
+        )
+        # LEGS latency diagnostic: total time from WS receive to display update
+        legs_in_flush = any("LEGS" in b.name for b in dirty_buttons)
+        if legs_in_flush and hasattr(self, "_latency_legs_ws_at"):
+            total_legs_ms = (t_end - self._latency_legs_ws_at) * 1000
+            logger.warning(
+                f"LATENCY_LEGS T3 flush total_since_ws={total_legs_ms:.0f}ms "
+                f"(wait={wait_ms:.0f} render={render_ms:.0f} usb={batch_ms:.0f})"
+            )
+
         self._schedule_dirty_flush_if_needed()
 
-    MINIMUM_FLUSH_DELAY_S = 0.200  # 200ms: let dataref batches from a single WS message accumulate before flushing
+    MINIMUM_FLUSH_DELAY_S = 0.080  # 80ms: let dataref batches from a single WS message accumulate before flushing
 
     def _schedule_dirty_flush_if_needed(self):
-        pass  # Inline debounce in event_loop handles this now without threads
+        with self._dirty_buttons_lock:
+            if not self._dirty_buttons:
+                return
+        if self._dirty_flush_timer is not None:
+            return  # already scheduled
+        self._dirty_flush_timer = threading.Timer(self.MINIMUM_FLUSH_DELAY_S, self._timer_flush)
+        self._dirty_flush_timer.daemon = True
+        self._dirty_flush_timer.start()
 
-    def _schedule_dirty_flush(self, delay_s: float):
-        pass  # Inline debounce in event_loop handles this now without threads
+    def _timer_flush(self):
+        self._dirty_flush_timer = None
+        self.flush_dirty_buttons()
 
     def stop_event_loop(self):
         if self.event_loop_run:
             self.event_loop_run = False
             self.event_queue.put("terminate")  # to unblock the Queue.get()
             # self.event_loop_thread.join()
+            if self._dirty_flush_timer is not None:
+                self._dirty_flush_timer.cancel()
+                self._dirty_flush_timer = None
+            if self._render_executor is not None:
+                self._render_executor.shutdown(wait=False)
+                self._render_executor = None
             logger.debug("stopped")
         else:
             logger.warning("not running")

@@ -146,8 +146,17 @@ class AnnunciatorPart:
         # Compare the visible state, not the raw formula values. This avoids
         # rerendering when upstream values jitter but the displayed output stays
         # identical after formatting.
+        _legs_profile = "LEGS" in self.annunciator.button.name
+        if _legs_profile:
+            _tv0 = time.perf_counter()
         value = self.value
+        if _legs_profile:
+            _value_ms = (time.perf_counter() - _tv0) * 1000
+            _tt0 = time.perf_counter()
         text = self._display.get_text(formula_result=value)
+        if _legs_profile:
+            _text_ms = (time.perf_counter() - _tt0) * 1000
+            logger.warning(f"LATENCY_LEGS part: {self.annunciator.button.name}/{self.name} value_ms={_value_ms:.1f} get_text_ms={_text_ms:.1f}")
         return {
             "text": text,
             "lit": self.is_lit,
@@ -609,7 +618,16 @@ class Annunciator(DrawBase):
         """
         There is a get_current_value value per annunciator part.
         """
-        states = {k: v.get_render_state() for k, v in self.annunciator_parts.items()}
+        _legs_profile = "LEGS" in self.button.name
+        states = {}
+        for k, v in self.annunciator_parts.items():
+            if _legs_profile:
+                _t0 = time.perf_counter()
+            state = v.get_render_state()
+            if _legs_profile:
+                _ms = (time.perf_counter() - _t0) * 1000
+                logger.warning(f"LATENCY_LEGS get_render_state: button={self.button.name} part={k} ms={_ms:.1f}")
+            states[k] = state
         logger.debug(f"button {self.button.name}: {type(self).__name__}: {states}")
         return states
 

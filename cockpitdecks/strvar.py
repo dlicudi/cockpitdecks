@@ -3,6 +3,7 @@
 # and compute/update its value whenever one of its variable changes
 #
 import logging
+import time
 import uuid
 import re
 
@@ -292,14 +293,21 @@ class StringWithVariables(Variable, VariableListener):
         Returns:
             str: [Formula string with substitutions]
         """
+        _profile = (
+            hasattr(self.owner, "name") and "LEGS" in str(getattr(self.owner, "name", ""))
+        )
+        _t0 = time.perf_counter() if _profile else 0
+
         if text is None:
             text = self.message
 
         if self.is_static:
             return text
 
+        icons_ms = 0.0
         # If there is a icon font has the main font, the whole string is formatted with that font
         if self._resolved_icons is None:
+            _ti0 = time.perf_counter() if _profile else 0
             self._resolved_icons = self.message
             if hasattr(self, "font"):  # must be a string with font specified so we know where to look for correspondance
                 for k, v in ICON_FONTS.items():
@@ -311,12 +319,17 @@ class StringWithVariables(Variable, VariableListener):
                             if i in v[1].keys():
                                 self._resolved_icons = self._resolved_icons.replace(f"${{{k}:{i}}}", v[1][i])
                                 logger.debug(f"variable {self.display_name}: substituing font icon {i}")
+            if _profile:
+                icons_ms = (time.perf_counter() - _ti0) * 1000
         text = self._resolved_icons if text == self.message else text
 
+        lookup_ms = 0.0
+        replace_ms = 0.0
         for token in self._tokens:
             value = default
             varname = token[2:-1]  # ${X} -> X
 
+            _tl0 = time.perf_counter() if _profile else 0
             # ${formula} gets replaced by the result of the formula:
             if token == f"${{{CONFIG_KW.FORMULA.value}}}":
                 value = self.get_formula_result(default=default)
@@ -326,6 +339,8 @@ class StringWithVariables(Variable, VariableListener):
                 value = self.get_state_variable_value(varname, default=default)
             elif Variable.may_be_non_internal_variable(varname):
                 value = self.get_simulator_variable_value(varname, default=default)
+            if _profile:
+                lookup_ms += (time.perf_counter() - _tl0) * 1000
 
             if value is None:
                 value = default
@@ -345,13 +360,20 @@ class StringWithVariables(Variable, VariableListener):
                             logger.warning(f"variable {self.display_name}: has format string '{local_format}' but value is not a number '{value}'")
 
             logger.debug(f"{self.owner} ({type(self.owner)}): {varname}: value {value}")
-            # print("BEFORE", text, token, str(value))
+            _tr0 = time.perf_counter() if _profile else 0
             text = text.replace(token, str(value))
-            # print("AFTER", text)
+            if _profile:
+                replace_ms += (time.perf_counter() - _tr0) * 1000
 
         if store:
             self.update_value(new_value=text, cascade=cascade)
 
+        if _profile:
+            total_ms = (time.perf_counter() - _t0) * 1000
+            logger.warning(
+                f"LATENCY_LEGS substitute_values: owner={getattr(self.owner, 'name', '?')} "
+                f"icons={icons_ms:.2f}ms lookup={lookup_ms:.2f}ms replace={replace_ms:.2f}ms total={total_ms:.2f}ms"
+            )
         return text
 
     def render(self):
@@ -442,14 +464,23 @@ class Formula(StringWithVariables):
         Returns:
             [type]: [formula result]
         """
+        _profile = (
+            hasattr(self.owner, "name") and "LEGS" in str(getattr(self.owner, "name", ""))
+        )
+        _ts0 = time.perf_counter() if _profile else 0
         expr = self.substitute_values()
+        if _profile:
+            _subst_ms = (time.perf_counter() - _ts0) * 1000
         logger.debug(f"formula {self.display_name}: {self.formula} => {expr}")
+        _tr0 = time.perf_counter() if _profile else 0
         r = RPC(expr)
-        # if self.data_type == "string":
-        #     r = RPC_for_strings(expr)
-        # else:
-        #     r = RPC(expr)
         value = r.calculate()
+        if _profile:
+            _rpc_ms = (time.perf_counter() - _tr0) * 1000
+            logger.warning(
+                f"LATENCY_LEGS execute_formula: owner={getattr(self.owner, 'name', '?')} "
+                f"subst={_subst_ms:.2f}ms rpc={_rpc_ms:.2f}ms"
+            )
         logger.debug(f"value {self.display_name}: {self.formula} => {expr} => {value}")
         valueout = value
         if self.is_string:

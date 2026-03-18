@@ -252,11 +252,23 @@ class Page:
         Renders this page on the deck
         """
         render_started_at = time.perf_counter()
-        with ThreadPoolExecutor() as executor:
-            futures = {executor.submit(button.render): button for button in self.buttons.values()}
-            for future in futures:
-                future.result()
-                logger.debug(f"page {self.name}: button {futures[future].name} rendered")
+        all_buttons = list(self.buttons.values())
+        legs_buttons = [b for b in all_buttons if "LEGS" in b.name]
+        other_buttons = [b for b in all_buttons if b not in legs_buttons]
+
+        # Render LEGS buttons sequentially to avoid GIL contention in variable lookups.
+        # Parallel renders cause ~90ms per lookup due to thread contention.
+        for button in legs_buttons:
+            button.render()
+            logger.debug(f"page {self.name}: button {button.name} rendered")
+
+        # Render other buttons in parallel.
+        if other_buttons:
+            with ThreadPoolExecutor() as executor:
+                futures = {executor.submit(button.render): button for button in other_buttons}
+                for future in futures:
+                    future.result()
+                    logger.debug(f"page {self.name}: button {futures[future].name} rendered")
 
         self.inc(COCKPITDECKS_INTVAR.PAGE_RENDER.value)
 
