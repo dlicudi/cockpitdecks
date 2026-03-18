@@ -1,0 +1,32 @@
+site_name: Cockpitdecks Architecture
+site_description: Architecture notes for the Cockpitdecks runtime
+repo_url: https://github.com/devleaks/cockpitdecks
+edit_uri: blob/main/architecture/
+
+docs_dir: architecture
+
+nav:
+  - Overview: index.md
+  - Runtime Flow: runtime-flow.md
+  - Diagrams: diagrams.md
+  - Workspace Map: workspace-map.md
+  - Agent Notes: agent-notes.md
+  - X-Plane Adapter: xplane-adapter.md
+  - Stream Deck Adapter: streamdeck-adapter.md
+  - Loupedeck Adapter: loupedeck-adapter.md
+
+theme:
+  name: readthedocs
+
+extra_javascript:
+  - https://unpkg.com/mermaid@10/dist/mermaid.min.js
+  - js/mermaid-init.js
+
+markdown_extensions:
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - toc:
+      permalink: true

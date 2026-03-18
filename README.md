@@ -22,6 +22,30 @@ You can find [numerous configurations for different aircrafts here](https://gith
 Fly safely.
 
 
+## Architecture
+
+The runtime architecture source of truth lives in this repository:
+
+- `architecture/index.md`
+- `architecture/runtime-flow.md`
+- `architecture/diagrams.md`
+- `architecture/workspace-map.md`
+- `architecture/agent-notes.md`
+- `architecture/xplane-adapter.md`
+- `architecture/streamdeck-adapter.md`
+- `architecture/loupedeck-adapter.md`
+
+These notes are intended for maintainers and AI agents and are kept next to the
+runtime code on purpose.
+
+To preview them locally:
+
+```sh
+python3 -m pip install -r requirements-docs.txt
+mkdocs serve
+```
+
+
 ## Installation
 
 
@@ -60,5 +84,3 @@ Fly safely.
 Recompilation of rt-midi on MacOS < 15 may require the specification of
 
 export CPLUS_INCLUDE_PATH=/opt/homebrew/Caskroom/miniforge/base/include/c++/v1
-
-
