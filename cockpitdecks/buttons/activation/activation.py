@@ -432,8 +432,8 @@ class Activation(ActivationBase, VariableListener):
 
     def get_state_variables(self) -> dict:
         base = InternalVariable(name=self.get_id()).name
-        vardb = self.button.cockpit.variable_database.database
-        drefs = {d.name.split(ID_SEP)[-1]: d.value for d in filter(lambda d: d.name.startswith(base), vardb.values())}
+        variables = self.button.cockpit.variable_database.snapshot_values()
+        drefs = {d.name.split(ID_SEP)[-1]: d.value for d in variables if d.name.startswith(base)}
         a = {
             "activation_type": type(self).__name__,
             "last_activated": self.last_activated,

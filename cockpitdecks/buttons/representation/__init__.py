@@ -2,6 +2,8 @@
 Button display and rendering abstraction.
 """
 
+import sysconfig
+
 from .representation import Representation
 
 # Image/icon based
@@ -20,8 +22,10 @@ from .data import DataIcon
 from .chart import ChartIcon
 from .gauge import TapeIcon, GaugeIcon
 from .solari import SolariIcon
-from .weather import WeatherBaseIcon
-from .weatherstationplot import WeatherStationPlot
+
+if not sysconfig.get_config_var("Py_GIL_DISABLED"):
+    from .weather import WeatherBaseIcon
+    from .weatherstationplot import WeatherStationPlot
 
 # Special Web Deck represenations for hardware button
 from .hardware import HardwareRepresentation, VirtualLED, VirtualEncoder

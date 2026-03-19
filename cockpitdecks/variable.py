@@ -3,6 +3,7 @@
 from __future__ import annotations
 import logging
 import time
+import threading
 from enum import Enum
 from abc import ABC, abstractmethod
 from typing import Dict, Any
@@ -348,6 +349,7 @@ class VariableDatabase:
 
     def __init__(self) -> None:
         self.database: Dict[str, Variable] = {}
+        self._lock = threading.RLock()
 
     def register(self, variable: Variable) -> Variable:
         if variable.name is None:
@@ -356,19 +358,26 @@ class VariableDatabase:
         if Variable.is_state_variable(variable.name):
             logger.warning(f"invalid variable name {variable.name}, this is a state, not stored")
             return variable
-        if variable.name not in self.database:
-            self.database[variable.name] = variable
-        else:
-            logger.debug(f"variable {variable.name} already registered")
+        with self._lock:
+            if variable.name not in self.database:
+                self.database[variable.name] = variable
+            else:
+                logger.debug(f"variable {variable.name} already registered")
         return variable
 
     def exists(self, name: str) -> bool:
-        return name in self.database
+        with self._lock:
+            return name in self.database
 
     def get(self, name: str) -> Variable | None:
-        if not self.exists(name):
-            logger.debug(f"variable {name} not found")
-        return self.database.get(name)
+        with self._lock:
+            if name not in self.database:
+                logger.debug(f"variable {name} not found")
+            return self.database.get(name)
+
+    def snapshot_values(self) -> list[Variable]:
+        with self._lock:
+            return list(self.database.values())
 
     def value_of(self, name: str, default: Any = None) -> Any | None:
         v = self.get(name)
@@ -379,20 +388,23 @@ class VariableDatabase:
         return value if value is not None else default
 
     def show_all(self, word: str = None):
-        for k in self.database:
+        with self._lock:
+            keys = list(self.database)
+        for k in keys:
             if word is None or word in k:
                 logger.debug(f"{k} = {self.value_of(k)}")
 
     def remove_all_simulator_variables(self):
-        to_delete = []
-        for d in self.database:
-            if Variable.may_be_non_internal_variable(d):  # type(variable) is Dataref
-                to_delete.append(d)
-        for d in to_delete:
-            self.database.pop(d)
+        with self._lock:
+            to_delete = []
+            for d in self.database:
+                if Variable.may_be_non_internal_variable(d):  # type(variable) is Dataref
+                    to_delete.append(d)
+            for d in to_delete:
+                self.database.pop(d)
 
     def dump(self, filename: str = "variable-database-dump.yaml"):
-        drefs = {d.name: d.value for d in self.database.values()}  #  if d.is_internal
+        drefs = {d.name: d.value for d in self.snapshot_values()}  #  if d.is_internal
         with open(filename, "w") as fp:
             yaml.dump(drefs, fp)
             logger.debug(f"variables saved in {filename} file")

@@ -2,7 +2,6 @@
 #
 import logging
 import time
-from concurrent.futures import ThreadPoolExecutor
 from typing import Dict
 
 from cockpitdecks import ID_SEP, DEFAULT_ATTRIBUTE_PREFIX
@@ -262,9 +261,14 @@ class Page:
             button.render()
             logger.debug(f"page {self.name}: button {button.name} rendered")
 
-        # Render other buttons in parallel.
+        # Render other buttons using the shared cockpit executor when available.
         if other_buttons:
-            with ThreadPoolExecutor() as executor:
+            executor = getattr(self.deck.cockpit, "_render_executor", None)
+            if executor is None:
+                for button in other_buttons:
+                    button.render()
+                    logger.debug(f"page {self.name}: button {button.name} rendered")
+            else:
                 futures = {executor.submit(button.render): button for button in other_buttons}
                 for future in futures:
                     future.result()

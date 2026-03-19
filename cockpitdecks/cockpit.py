@@ -16,6 +16,7 @@ import re
 import time
 import tempfile
 import subprocess
+import sysconfig
 
 from queue import Empty, Queue
 from typing import Dict, Tuple, Set
@@ -126,6 +127,21 @@ if EVENTLOGFILE is not None:
 LOG_SIMULATOR_VARIABLE_EVENTS = False  # Do not log dataref events (numerous, can grow quite large, especialy for long sessions)
 #
 # ################################################
+
+
+def is_free_threaded_python() -> bool:
+    return bool(sysconfig.get_config_var("Py_GIL_DISABLED"))
+
+
+FREE_THREADED_SKIP_MODULES = {
+    "cockpitdecks.buttons.representation.weather",
+    "cockpitdecks.buttons.representation.weatherstationplot",
+    "cockpitdecks.resources.weather",
+    "cockpitdecks.resources.weathericon",
+    "cockpitdecks_xp.resources.xprealweather",
+    "cockpitdecks_xp.buttons.representation.xpstationplot",
+    "cockpitdecks_xp.buttons.representation.xpweather",
+}
 
 
 class CockpitInstruction(Instruction):
@@ -546,7 +562,12 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
         if type(self.all_extensions) is str:
             self.all_extensions = {self.all_extensions}
         self.all_extensions = set(self.all_extensions)
+        self.requested_extensions = set(self.all_extensions)
         self.all_extensions.update(COCKPITDECKS_INTERNAL_EXTENSIONS)
+        if is_free_threaded_python() and "cockpitdecks_wm" not in self.requested_extensions:
+            # cockpitdecks_wm pulls in timezonefinder -> h3, which currently re-enables the GIL
+            self.all_extensions.discard("cockpitdecks_wm")
+            logger.info("skipping cockpitdecks_wm on free-threaded Python; load it explicitly to enable weather support")
 
         self.cockpitdecks_path = environ.get(ENVIRON_KW.COCKPITDECKS_PATH.value)
 
@@ -620,7 +641,11 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
         self._dirty_buttons_lock = threading.Lock()
         self._dirty_flush_timer = None
         self._dirty_flush_due_at = None
-        self._render_executor = ThreadPoolExecutor(max_workers=12, thread_name_prefix="ButtonRender")
+        if is_free_threaded_python():
+            self._render_executor = None
+            logger.info("free-threaded Python detected; using sequential button rendering")
+        else:
+            self._render_executor = ThreadPoolExecutor(max_workers=12, thread_name_prefix="ButtonRender")
         self._event_loop_report_interval = 500
         self._event_loop_slow_event_ms = 50.0
         self._event_loop_events_since_report = 0
@@ -721,6 +746,10 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
             results = {}
             for loader, name, is_pkg in pkgutil.walk_packages(package.__path__):
                 full_name = package.__name__ + "." + name
+                if is_free_threaded_python() and full_name in FREE_THREADED_SKIP_MODULES:
+                    if trace_ext_loading:
+                        logger.info(f"skipping module {full_name} on free-threaded Python")
+                    continue
                 try:
                     results[full_name] = importlib.import_module(full_name)
                     if trace_ext_loading:
@@ -1309,7 +1338,7 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
 
     def inspect_variables(self, what: str | None = None):
         if what is not None and what.startswith("datarefs"):
-            for dref in self.variable_database.database.values():
+            for dref in self.variable_database.snapshot_values():
                 logger.info(f"{dref.name} = {dref.value} ({len(dref.listeners)} lsnrs)")
                 if what.endswith("listener"):
                     for l in dref.listeners:
@@ -2149,13 +2178,20 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
 
         # Render other buttons in parallel.
         executor = self._render_executor
-        if executor is not None and other_buttons:
-            futures = {executor.submit(timed_render, button): button for button in other_buttons}
-            for future in futures:
-                try:
-                    future.result()
-                except Exception:
-                    logger.warning(f"button {futures[future].name}: problem during deferred rendering", exc_info=True)
+        if other_buttons:
+            if executor is None:
+                for button in other_buttons:
+                    try:
+                        timed_render(button)
+                    except Exception:
+                        logger.warning(f"button {button.name}: problem during deferred rendering", exc_info=True)
+            else:
+                futures = {executor.submit(timed_render, button): button for button in other_buttons}
+                for future in futures:
+                    try:
+                        future.result()
+                    except Exception:
+                        logger.warning(f"button {futures[future].name}: problem during deferred rendering", exc_info=True)
 
         t_render_done = time.monotonic()
 
