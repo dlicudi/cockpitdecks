@@ -581,10 +581,13 @@ class MultiIcons(Icon):
             logger.warning(f"button {self.button_name}: {type(self).__name__}: complex value {value}")
             return None
         if self.num_icons() > 0:
-            if value >= 0 and value < self.num_icons():
-                self.icon = self.multi_icons[value]
+            new_icon = self.multi_icons[value] if value >= 0 and value < self.num_icons() else self.multi_icons[value % self.num_icons()]
+            if self.icon != new_icon:
+                self.icon = new_icon
+                # Icon base class caches get_image_for_icon(); invalidate when icon changes
+                self.clean_cache()
             else:
-                self.icon = self.multi_icons[value % self.num_icons()]
+                self.icon = new_icon
             return super().render()
         else:
             logger.warning(f"button {self.button_name}: {type(self).__name__}: icon not found {value}/{self.num_icons()}")
