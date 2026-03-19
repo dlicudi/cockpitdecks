@@ -264,7 +264,7 @@ class Page:
         # Render other buttons using the shared cockpit executor when available.
         if other_buttons:
             executor = getattr(self.deck.cockpit, "_render_executor", None)
-            if executor is None:
+            if executor is None or not self.deck.allows_parallel_button_rendering():
                 for button in other_buttons:
                     button.render()
                     logger.debug(f"page {self.name}: button {button.name} rendered")

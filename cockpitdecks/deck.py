@@ -3,6 +3,7 @@
 import os
 import logging
 import time
+import threading
 
 from typing import Dict, List, Any
 from abc import ABC, abstractmethod
@@ -502,6 +503,12 @@ class Deck(ABC):
     #
     # Deck Specific Functions : Rendering
     #
+    def requires_sequential_button_rendering_on_free_threaded_python(self) -> bool:
+        return False
+
+    def allows_parallel_button_rendering(self) -> bool:
+        return not self.cockpit.is_free_threaded_python() or not self.requires_sequential_button_rendering_on_free_threaded_python()
+
     def fill_empty(self, key):
         """Procedure to fill keys that do not contain any feedback rendering.
         key ([str]): Key index to fill with empty/void feedback.
@@ -643,6 +650,8 @@ class DeckWithIcons(Deck):
     def __init__(self, name: str, config: dict, cockpit: "Cockpit", device=None):
         Deck.__init__(self, name=name, config=config, cockpit=cockpit, device=device)
         self._bg_cache = {}
+        self._bg_cache_lock = threading.RLock()
+        self._icon_render_lock = threading.RLock()
 
     def get_default_icon(self):
         icons = self.cockpit.icons
@@ -733,7 +742,8 @@ class DeckWithIcons(Deck):
         image = None
         if use_texture and texture_in is not None:
             cache_key = (texture_in, width, height)
-            cached = self._bg_cache.get(cache_key)
+            with self._bg_cache_lock:
+                cached = self._bg_cache.get(cache_key)
             if cached is not None:
                 return cached.copy()
             image = self.cockpit.get_icon_image(texture_in)
@@ -741,7 +751,8 @@ class DeckWithIcons(Deck):
         if image is not None:  # found a texture as requested
             logger.debug(f"{who}: use texture {texture_in}")
             image = image.resize((width, height))
-            self._bg_cache[cache_key] = image
+            with self._bg_cache_lock:
+                self._bg_cache[cache_key] = image
             # self.inc(COCKPITDECKS_INTVAR.RENDER_BG_TEXTURE.value)
             return image.copy()
         if use_texture and texture_in is None:

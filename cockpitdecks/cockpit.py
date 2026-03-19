@@ -641,11 +641,9 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
         self._dirty_buttons_lock = threading.Lock()
         self._dirty_flush_timer = None
         self._dirty_flush_due_at = None
+        self._render_executor = ThreadPoolExecutor(max_workers=12, thread_name_prefix="ButtonRender")
         if is_free_threaded_python():
-            self._render_executor = None
-            logger.info("free-threaded Python detected; using sequential button rendering")
-        else:
-            self._render_executor = ThreadPoolExecutor(max_workers=12, thread_name_prefix="ButtonRender")
+            logger.info("free-threaded Python detected; using deck-specific render safety")
         self._event_loop_report_interval = 500
         self._event_loop_slow_event_ms = 50.0
         self._event_loop_events_since_report = 0
@@ -677,6 +675,9 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
 
     def get_id(self):
         return self.name
+
+    def is_free_threaded_python(self) -> bool:
+        return is_free_threaded_python()
 
     # From the separation between cockpit/aircraft
     @property
@@ -2166,8 +2167,16 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
             button.render()
             render_times[button.name] = (time.monotonic() - t0) * 1000
 
-        legs_buttons = [b for b in dirty_buttons if "LEGS" in b.name]
-        other_buttons = [b for b in dirty_buttons if b not in legs_buttons]
+        legs_buttons = []
+        sequential_buttons = []
+        parallel_buttons = []
+        for button in dirty_buttons:
+            if "LEGS" in button.name:
+                legs_buttons.append(button)
+            elif button.deck is not None and not button.deck.allows_parallel_button_rendering():
+                sequential_buttons.append(button)
+            else:
+                parallel_buttons.append(button)
 
         # Render LEGS buttons sequentially to avoid GIL contention in variable lookups.
         for button in legs_buttons:
@@ -2176,17 +2185,23 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
             except Exception:
                 logger.warning(f"button {button.name}: problem during deferred rendering", exc_info=True)
 
-        # Render other buttons in parallel.
+        for button in sequential_buttons:
+            try:
+                timed_render(button)
+            except Exception:
+                logger.warning(f"button {button.name}: problem during deferred rendering", exc_info=True)
+
+        # Render the remaining buttons in parallel.
         executor = self._render_executor
-        if other_buttons:
+        if parallel_buttons:
             if executor is None:
-                for button in other_buttons:
+                for button in parallel_buttons:
                     try:
                         timed_render(button)
                     except Exception:
                         logger.warning(f"button {button.name}: problem during deferred rendering", exc_info=True)
             else:
-                futures = {executor.submit(timed_render, button): button for button in other_buttons}
+                futures = {executor.submit(timed_render, button): button for button in parallel_buttons}
                 for future in futures:
                     try:
                         future.result()
