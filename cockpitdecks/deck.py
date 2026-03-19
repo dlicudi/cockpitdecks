@@ -64,7 +64,8 @@ class Deck(ABC):
         # Pages
         self.pages: Dict[str, Page] = {}
         self.home_page: Page | None = None
-        self.current_page: Page | None = None
+        self._current_page: Page | None = None
+        self._current_page_lock = threading.Lock()
         self.previous_page: Page | None = None
         self.page_history: List[str] = []
         self.page_label_map: Dict[str, str] = {}  # page name -> display label, set by page-cycle activations
@@ -110,6 +111,16 @@ class Deck(ABC):
 
     def is_virtual_deck(self) -> bool:
         return self.deck_type.is_virtual_deck()
+
+    @property
+    def current_page(self) -> Page | None:
+        with self._current_page_lock:
+            return self._current_page
+
+    @current_page.setter
+    def current_page(self, page: Page | None):
+        with self._current_page_lock:
+            self._current_page = page
 
     def get_deck_button_definition(self, idx) -> ButtonType:
         """Returns a deck's button definition from the deck type.
@@ -399,7 +410,8 @@ class Deck(ABC):
                 logger.debug(f"deck {self.name} unloading page {self.current_page.name}..")
                 logger.debug("..unloading simulator variables..")
                 self.cockpit.sim.remove_simulator_variables_to_monitor(
-                    simulator_variables=self.current_page.simulator_variables, reason=f"deck {self.name}, page {self.current_page.name}"
+                    simulator_variables=self.current_page.get_simulator_variables_snapshot(),
+                    reason=f"deck {self.name}, page {self.current_page.name}",
                 )
                 logger.debug("..detaching simulator variable listeners..")
                 self.current_page.detach_simulator_variable_listeners()
@@ -417,7 +429,8 @@ class Deck(ABC):
                 var.update_value(new_value=label, cascade=True)
             logger.debug("..loading simulator variables..")
             self.cockpit.sim.add_simulator_variables_to_monitor(
-                simulator_variables=self.current_page.simulator_variables, reason=f"deck {self.name}, page {self.current_page.name}"
+                simulator_variables=self.current_page.get_simulator_variables_snapshot(),
+                reason=f"deck {self.name}, page {self.current_page.name}",
             )  # set simulator variables to monitor
             logger.debug("..attaching simulator variable listeners..")
             self.current_page.attach_simulator_variable_listeners()

@@ -1,6 +1,7 @@
 # Set of buttons for a deck
 #
 import logging
+import threading
 import time
 from typing import Dict
 
@@ -31,6 +32,7 @@ class Page:
         self.buttons: Dict[str, Button] = {}
         self.button_names: Dict[str, Button] = {}
         self.simulator_variables: Dict[str, SimulatorVariable] = {}
+        self._simulator_variables_lock = threading.Lock()
 
         self.fill_empty_keys = config.get("fill-empty-keys", True)
 
@@ -82,8 +84,14 @@ class Page:
         if isinstance(ld, dict) and isinstance(attributes, dict):
             setattr(self, ATTRNAME, ld | attributes)
 
+    def get_simulator_variables_snapshot(self) -> Dict[str, SimulatorVariable]:
+        """Return a thread-safe copy of simulator_variables for passing to sim add/remove monitor."""
+        with self._simulator_variables_lock:
+            return dict(self.simulator_variables)
+
     def get_simulator_variable_value(self, simulator_variable, default=None):
-        d = self.simulator_variables.get(simulator_variable)
+        with self._simulator_variables_lock:
+            d = self.simulator_variables.get(simulator_variable)
         if d is None:
             logger.warning(f"page {self.name}: {simulator_variable} not found")
             return None  # should return default?
@@ -190,23 +198,24 @@ class Page:
         for d in button.get_variables():  # these are requested by Cockpitecks to the simulator
             if Variable.is_state_variable(d):
                 continue
-            if d not in self.simulator_variables:
-                ref = self.sim.get_variable(d)  # creates or return already defined dataref
-                if ref is not None:
-                    if attach:
-                        ref.add_listener(button)
-                    if isinstance(ref, SimulatorVariable) and not Variable.is_internal_variable(d):
-                        self.simulator_variables[d] = ref
-                        self.inc(COCKPITDECKS_INTVAR.DATAREF_REGISTERED.value)
-                        logger.debug(f"page {self.name}: button {button.name} registered for new dataref {d}")
+            with self._simulator_variables_lock:
+                if d not in self.simulator_variables:
+                    ref = self.sim.get_variable(d)  # creates or return already defined dataref
+                    if ref is not None:
+                        if attach:
+                            ref.add_listener(button)
+                        if isinstance(ref, SimulatorVariable) and not Variable.is_internal_variable(d):
+                            self.simulator_variables[d] = ref
+                            self.inc(COCKPITDECKS_INTVAR.DATAREF_REGISTERED.value)
+                            logger.debug(f"page {self.name}: button {button.name} registered for new dataref {d}")
+                        else:
+                            logger.debug(f"page {self.name}: button {button.name} dataref {d} is not a simulator variable")
                     else:
-                        logger.debug(f"page {self.name}: button {button.name} dataref {d} is not a simulator variable")
-                else:
-                    logger.error(f"page {self.name}: button {button.name}: failed to create dataref {d}")
-            else:  # dataref already exists in list, just add this button as a listener
-                if attach:
-                    self.simulator_variables[d].add_listener(button)
-                logger.debug(f"page {self.name}: button {button.name} registered for existing dataref {d}")
+                        logger.error(f"page {self.name}: button {button.name}: failed to create dataref {d}")
+                else:  # dataref already exists in list, just add this button as a listener
+                    if attach:
+                        self.simulator_variables[d].add_listener(button)
+                    logger.debug(f"page {self.name}: button {button.name} registered for existing dataref {d}")
 
         logger.debug(f"page {self.name}: button {button.name} datarefs registered")
 
@@ -215,7 +224,8 @@ class Page:
             for d in button.get_variables():
                 if Variable.is_state_variable(d):
                     continue
-                ref = self.simulator_variables.get(d)
+                with self._simulator_variables_lock:
+                    ref = self.simulator_variables.get(d)
                 if ref is None and Variable.is_internal_variable(d):
                     # Internal variables are not stored in simulator_variables,
                     # look them up directly from the simulator/cockpit variable database.
@@ -226,7 +236,8 @@ class Page:
 
     def unregister_simulator_variable(self, button: Button):
         for d in button.get_variables():
-            ref = self.simulator_variables.get(d)
+            with self._simulator_variables_lock:
+                ref = self.simulator_variables.get(d)
             if ref is not None:
                 ref.remove_listener(button)
 
@@ -316,7 +327,9 @@ class Page:
         Cleans all individual buttons on the page
         """
         if self.is_current_page() and self.sim is not None:
-            self.sim.remove_simulator_variables_to_monitor(simulator_variables=self.simulator_variables, reason=f"terminate page {self.name}")
+            self.sim.remove_simulator_variables_to_monitor(
+                simulator_variables=self.get_simulator_variables_snapshot(), reason=f"terminate page {self.name}"
+            )
         if not disconnected:
             self.clean()
         for button in self.buttons.values():

@@ -6,7 +6,7 @@ import time
 import threading
 from enum import Enum
 from abc import ABC, abstractmethod
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 
 from cockpitdecks import SPAM_LEVEL, DEFAULT_FREQUENCY, CONFIG_KW, now, yaml
@@ -79,6 +79,8 @@ class Variable(ABC):
         self.current_array: List[float] = []
 
         self.listeners: List[VariableListener] = []  # buttons using this simulator_variable, will get notified if changes.
+        self._listeners_lock = threading.Lock()
+        self._value_lock = threading.RLock()
 
     def __str__(self) -> str:
         return str(self.name)
@@ -180,24 +182,28 @@ class Variable(ABC):
 
     @property
     def has_value(self) -> bool:
-        return self._updated > 0 or self._changed > 0
+        with self._value_lock:
+            return self._updated > 0 or self._changed > 0
 
     def has_changed(self):
-        if self.previous_value is None and self.current_value is None:
-            return False
-        elif self.previous_value is None and self.current_value is not None:
-            return True
-        elif self.previous_value is not None and self.current_value is None:
-            return True
-        return self.current_value != self.previous_value
+        with self._value_lock:
+            if self.previous_value is None and self.current_value is None:
+                return False
+            elif self.previous_value is None and self.current_value is not None:
+                return True
+            elif self.previous_value is not None and self.current_value is None:
+                return True
+            return self.current_value != self.previous_value
 
     @property
     def value(self):
-        return self.current_value
+        with self._value_lock:
+            return self.current_value
 
     @value.setter
     def value(self, value):
-        self.current_value = value
+        with self._value_lock:
+            self.current_value = value
 
     def update_value(self, new_value, cascade: bool = False) -> bool:
         # returns whether has changed
@@ -207,40 +213,42 @@ class Variable(ABC):
         def local_round_arr(val):
             return [local_round(v) for v in val]
 
-        self._previous_value = self._current_value  # raw
-        self._current_value = new_value  # raw
-        self.previous_value = self.current_value  # exposed
-        if self.is_string:
-            self.current_value = new_value
-        else:
-            if type(new_value) in [int, float]:
-                self.current_value = local_round(new_value)
-            elif type in [list, tuple]:
-                self.current_value = local_round_arr(new_value)
-            else:
+        with self._value_lock:
+            self._previous_value = self._current_value  # raw
+            self._current_value = new_value  # raw
+            self.previous_value = self.current_value  # exposed
+            if self.is_string:
                 self.current_value = new_value
-        self._updated = self._updated + 1
-        self._last_updated = now()
-        # self.notify_updated()
-        if self.has_changed():
-            self._changed = self._changed + 1
-            self._last_changed = now()
-            logger.log(
-                SPAM_LEVEL,
-                f"variable {self.name} updated {self.previous_value} -> {self.current_value}",
-            )
-            if cascade:
-                self.notify()
+            else:
+                if type(new_value) in [int, float]:
+                    self.current_value = local_round(new_value)
+                elif type in [list, tuple]:
+                    self.current_value = local_round_arr(new_value)
+                else:
+                    self.current_value = new_value
+            self._updated = self._updated + 1
+            self._last_updated = now()
+            changed = self.has_changed()
+            if changed:
+                self._changed = self._changed + 1
+                self._last_changed = now()
+                logger.log(
+                    SPAM_LEVEL,
+                    f"variable {self.name} updated {self.previous_value} -> {self.current_value}",
+                )
+
+        if changed and cascade:
+            self.notify()
             return True
-        # logger.error(f"variable {self.name} updated")
-        return False
+        return changed
 
     def value_formatted(self):
         """Format value if format is supplied
         Returns:
             formatted value
         """
-        value = self.current_value
+        with self._value_lock:
+            value = self.current_value
         if self._format is not None:
             if type(value) in [int, float]:  # probably formula is a constant value
                 value_str = self._format.format(value)
@@ -258,19 +266,23 @@ class Variable(ABC):
     def add_listener(self, obj):
         if not isinstance(obj, VariableListener):
             logger.warning(f"{self.name} not a listener {obj}")
-        if obj not in self.listeners:
-            self.listeners.append(obj)
-        logger.debug(f"{self.name} added listener ({len(self.listeners)})")
+        with self._listeners_lock:
+            if obj not in self.listeners:
+                self.listeners.append(obj)
+            logger.debug(f"{self.name} added listener ({len(self.listeners)})")
 
     def remove_listener(self, obj):
         if not isinstance(obj, VariableListener):
             logger.warning(f"{self.name} not a listener {obj}")
-        if obj in self.listeners:
-            self.listeners.remove(obj)
-        logger.debug(f"{self.name} removed listener ({len(self.listeners)})")
+        with self._listeners_lock:
+            if obj in self.listeners:
+                self.listeners.remove(obj)
+            logger.debug(f"{self.name} removed listener ({len(self.listeners)})")
 
     def notify(self):
-        for lsnr in self.listeners:
+        with self._listeners_lock:
+            listeners_snapshot = list(self.listeners)
+        for lsnr in listeners_snapshot:
             lsnr.variable_changed(self)
             lsnr_name = lsnr.vl_name if hasattr(lsnr, "vl_name") else f"no listener name for {self.name} ({type(lsnr)})"
             if hasattr(lsnr, "page") and lsnr.page is not None:

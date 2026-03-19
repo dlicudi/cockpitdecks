@@ -8,6 +8,7 @@ from typing import Dict, List, Set
 from enum import Enum
 from PIL import Image, ImageDraw, ImageFilter
 
+from cockpitdecks.pil_sync import PIL_RENDER_LOCK
 from cockpitdecks import CONFIG_KW, ANNUNCIATOR_STYLES, DEFAULT_ATTRIBUTE_PREFIX
 from cockpitdecks.resources.color import convert_color, light_off, is_number
 from cockpitdecks.simulator import SimulatorVariable
@@ -298,25 +299,27 @@ class AnnunciatorPart:
                 if not state["lit"] and type(self.annunciator) != AnnunciatorAnimate:
                     logger.debug(f"button {self.annunciator.button.name}: part {self.name}: not lit (Korry)")
                 draw_started_at = time.perf_counter()
-                draw.multiline_text(
-                    (self.center_w(), self.center_h()),
-                    text=text,
-                    font=font,
-                    anchor="mm",
-                    align="center",
-                    fill=color,
-                )
-                draw_duration_ms = (time.perf_counter() - draw_started_at) * 1000.0
-
-                if state["framed"]:
-                    frame_started_at = time.perf_counter()
-                    txtbb = draw.multiline_textbbox(
+                with PIL_RENDER_LOCK:
+                    draw.multiline_text(
                         (self.center_w(), self.center_h()),
                         text=text,
                         font=font,
                         anchor="mm",
-                        align="center",  # min frame, just around the text
+                        align="center",
+                        fill=color,
                     )
+                    if state["framed"]:
+                        txtbb = draw.multiline_textbbox(
+                            (self.center_w(), self.center_h()),
+                            text=text,
+                            font=font,
+                            anchor="mm",
+                            align="center",  # min frame, just around the text
+                        )
+                draw_duration_ms = (time.perf_counter() - draw_started_at) * 1000.0
+
+                if state["framed"]:
+                    frame_started_at = time.perf_counter()
                     text_margin = 3 * inside  # margin "around" text, line will be that far from text
                     framebb = (
                         (txtbb[0] - text_margin, txtbb[1] - text_margin),

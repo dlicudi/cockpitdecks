@@ -12,6 +12,7 @@ from PIL import ImageDraw, ImageFont
 def _cached_truetype(font_path: str, font_size: int):
     return ImageFont.truetype(font_path, font_size)
 
+from cockpitdecks.pil_sync import PIL_RENDER_LOCK
 from cockpitdecks.resources.color import convert_color, has_ext, add_ext
 from cockpitdecks import CONFIG_KW, DECK_FEEDBACK
 from .representation import Representation
@@ -199,21 +200,22 @@ class IconBase(Representation):
             h = image.height - inside - text_size / 2
         # logger.debug(f"position {(w, h)}")
         ls = text.line_spacing if hasattr(text, "line_spacing") else 4
-        draw.multiline_text((w, h), text=message, font=font, anchor=p + "m", align=a, fill=text.color, spacing=ls)  # (image.width / 2, 15)
-        # VU label, use same font as label above, force cyan color, placed in top right of image
-        if text.prefix == CONFIG_KW.LABEL.value and self.label_vu is not None:
-            txt = str(self.label_vu) + VU
-            y = inside + text_size
-            if "b" in self.label_vu_position:
-                y = image.height - inside - text_size
-            x = image.width - inside
-            a = "r"
-            t = "rb"
-            if "l" in self.label_vu_position[1]:
-                x = inside
-                a = "l"
-                t = "lb"
-            draw.text((x, y), text=txt, font=font, anchor=t, align=a, fill="cyan")
+        with PIL_RENDER_LOCK:
+            draw.multiline_text((w, h), text=message, font=font, anchor=p + "m", align=a, fill=text.color, spacing=ls)  # (image.width / 2, 15)
+            # VU label, use same font as label above, force cyan color, placed in top right of image
+            if text.prefix == CONFIG_KW.LABEL.value and self.label_vu is not None:
+                txt = str(self.label_vu) + VU
+                y = inside + text_size
+                if "b" in self.label_vu_position:
+                    y = image.height - inside - text_size
+                x = image.width - inside
+                a = "r"
+                t = "rb"
+                if "l" in self.label_vu_position[1]:
+                    x = inside
+                    a = "l"
+                    t = "lb"
+                draw.text((x, y), text=txt, font=font, anchor=t, align=a, fill="cyan")
         return image
 
     def clean(self):
