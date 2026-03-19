@@ -1691,7 +1691,7 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
         return None
 
     def get_icon(self, candidate_icon):
-        for ext in ["", ".png", ".jpg", ".jpeg"]:
+        for ext in ["", ".svg", ".png", ".jpg", ".jpeg"]:
             fn = add_ext(candidate_icon, ext)
             if fn in self.icons.keys():
                 logger.debug(f"Cockpit: icon {fn} found")
