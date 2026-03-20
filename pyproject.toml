@@ -34,6 +34,8 @@ dependencies = [
     "py3rtree @ git+https://github.com/drwelby/py3rtree",
     "ruamel.yaml>=0.19.1,<0.20",
     "simple-websocket~=1.1.0",
+    "suntime~=1.3",
+    "timezonefinder>=6.5,<9",
     "usb-monitor~=1.23"
 ]
 
