@@ -39,6 +39,10 @@ hiddenimports += [
     "mido.backends.rtmidi",
     "StreamDeck.ImageHelpers.PILHelper",
     "Loupedeck.Devices.LoupedeckLive",
+    # Hardware drivers (collect_submodules can fail if import order hits a cycle)
+    "cockpitdecks_ld.decks.loupedeck",
+    "cockpitdecks_ld.buttons.representation",
+    "cockpitdecks_sd.decks.streamdeck",
 ]
 
 a = Analysis(
