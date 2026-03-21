@@ -366,11 +366,16 @@ ENV_PATH = environment.get(ENVIRON_KW.COCKPITDECKS_PATH.value)
 if ENV_PATH is not None:
     COCKPITDECKS_PATH = add_env(COCKPITDECKS_PATH, ENV_PATH)
 
-# Append X-Plane regular aircraft paths
+# Append X-Plane aircraft paths. Include top-level Aircraft/ so payware and third-party
+# folders (e.g. …/Aircraft/Epic E1000G) resolve, not only Laminar/Extra/Airbus subtrees.
 AIRCRAFT_FOLDERS = ["Laminar Research", "Extra Aircraft", "Airbus"]
 
 if SIMULATOR_HOME is not None and SIMULATOR_NAME == "X-Plane":
-    COCKPITDECKS_PATH = add_env(COCKPITDECKS_PATH, [os.path.join(SIMULATOR_HOME, "Aircraft", d) for d in AIRCRAFT_FOLDERS])
+    aircraft_root = os.path.join(SIMULATOR_HOME, "Aircraft")
+    COCKPITDECKS_PATH = add_env(
+        COCKPITDECKS_PATH,
+        [aircraft_root] + [os.path.join(aircraft_root, d) for d in AIRCRAFT_FOLDERS],
+    )
 
 environment[ENVIRON_KW.COCKPITDECKS_PATH.value] = COCKPITDECKS_PATH
 

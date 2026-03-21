@@ -1892,6 +1892,9 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
 
         if acpath is None:
             logger.warning(f"aircraft changed to {acname}, cannot find aircraft path")
+            # Still refresh simulator metadata: X-Plane renumbers dataref ids per aircraft load.
+            if self.sim is not None:
+                self.sim.aircraft_changed()
             return
 
         # We try to see if we have a new livery as well
