@@ -1,5 +1,11 @@
 # cockpitdecks-launcher.spec
 
+import os
+import sys
+
+sys.path.insert(0, os.path.abspath(os.getcwd()))
+sys.path.insert(0, os.path.abspath(os.path.join(os.getcwd(), "..", "xplane-webapi")))
+
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 block_cipher = None
@@ -15,7 +21,6 @@ for pkg in [
     "cockpitdecks_sd",
     "cockpitdecks_wm",
     "cockpitdecks_ext",
-    "cockpitdecks_bx",
     "avwx",
     "StreamDeck",
     "Loupedeck",
@@ -38,7 +43,10 @@ hiddenimports += [
 
 a = Analysis(
     ["launcher.py"],
-    pathex=[],
+    pathex=[
+        os.path.abspath(os.getcwd()),
+        os.path.abspath(os.path.join(os.getcwd(), "..", "xplane-webapi")),
+    ],
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
