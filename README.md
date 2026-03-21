@@ -79,6 +79,37 @@ cockpitdecks_cli --demo'
 Fly safely.
 
 
+## Launcher and Packaging
+
+`launcher.py` is a thin entrypoint that runs `cockpitdecks.start` as `__main__`. It exists so the app can be launched directly or bundled cleanly for distribution.
+
+The PyInstaller build definition is [cockpitdecks-launcher.spec](/Users/duanelicudi/GitHub/cockpitdecks/cockpitdecks-launcher.spec). It collects the core package plus the optional backends used by Cockpitdecks:
+
+- `cockpitdecks`
+- `cockpitdecks_xp`
+- `cockpitdecks_ld`
+- `cockpitdecks_sd`
+- `cockpitdecks_wm`
+- `cockpitdecks_ext`
+- `avwx`
+- `StreamDeck`
+- `Loupedeck`
+- `requests_cache`
+
+### Build the launcher
+
+```sh
+python -m pip install pyinstaller
+pyinstaller cockpitdecks-launcher.spec
+```
+
+The generated executable is named `cockpitdecks-launcher`.
+
+### Notes
+
+- If a package is not installed, the spec logs the `collect_all` failure and continues.
+- Some backends are only needed for specific devices or integrations, so the bundled app may still be valid even if not every optional package is present.
+
 ## Developer note
 
 Recompilation of rt-midi on MacOS < 15 may require the specification of
