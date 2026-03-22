@@ -741,7 +741,17 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
                         logger.info(f"loading package {package}")
                     package = importlib.import_module(package)
                 except ModuleNotFoundError:
-                    logger.warning(f"package {package} not found, ignored (may be path to module was not supplied or is not correct?)")
+                    if package in COCKPITDECKS_INTERNAL_EXTENSIONS:
+                        extra = ""
+                        if getattr(sys, "frozen", False):
+                            extra = " — frozen app: add this package to cockpitdecks-launcher.spec (collect_all) and rebuild"
+                        logger.warning(
+                            f"package {package} not found, ignored (internal extension missing from bundle or PYTHONPATH){extra}"
+                        )
+                    else:
+                        logger.warning(
+                            f"package {package} not found, ignored (may be path to module was not supplied or is not correct?)"
+                        )
                     return {}
 
             results = {}

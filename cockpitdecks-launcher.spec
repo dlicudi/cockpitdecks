@@ -21,6 +21,8 @@ for pkg in [
     "cockpitdecks_sd",
     "cockpitdecks_wm",
     "cockpitdecks_ext",
+    "cockpitdecks_bx",
+    "xtouchmini",
     "avwx",
     "StreamDeck",
     "Loupedeck",
@@ -43,6 +45,8 @@ hiddenimports += [
     "cockpitdecks_ld.decks.loupedeck",
     "cockpitdecks_ld.buttons.representation",
     "cockpitdecks_sd.decks.streamdeck",
+    "cockpitdecks_bx.decks.xtouchmini",
+    "cockpitdecks_bx.buttons.representation",
 ]
 
 a = Analysis(
@@ -50,6 +54,7 @@ a = Analysis(
     pathex=[
         os.path.abspath(os.getcwd()),
         os.path.abspath(os.path.join(os.getcwd(), "..", "xplane-webapi")),
+        os.path.abspath(os.path.join(os.getcwd(), "..", "cockpitdecks_bx")),
     ],
     binaries=binaries,
     datas=datas,
