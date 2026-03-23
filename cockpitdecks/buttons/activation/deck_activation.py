@@ -723,8 +723,8 @@ class Encoder(Activation, EncoderProperties):
         """
         return "\n\r".join(
             [
-                f"This encoder executes command {self._commands[0]} when it is turned clockwise.",
-                f"This encoder executes command {self._commands[1]} when it is turned counter-clockwise.",
+                f"This encoder executes command {self._commands[0]} when it is turned counter-clockwise.",
+                f"This encoder executes command {self._commands[1]} when it is turned clockwise.",
             ]
         )
 

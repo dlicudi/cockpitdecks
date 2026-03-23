@@ -501,8 +501,10 @@ class MultiTexts(IconText):
     def render(self):
         value = self.get_button_value()
         if value is None:
-            logger.warning(f"button {self.button_name}: {type(self).__name__}: no current value, no rendering")
-            return None
+            # Keep button visible while datarefs are warming up (e.g. FMS pages).
+            # Fall back to the first style instead of returning a blank tile.
+            logger.debug(f"button {self.button_name}: {type(self).__name__}: no current value, using default state")
+            value = 0
         if type(value) in [str, int, float]:
             value = int(float(value))  # int('1.0') does not work
         else:

@@ -1878,12 +1878,14 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
             else:
                 logger.info("not reloading on livery change")
 
-    def change_aircraft(self, newpath: str):
+    def change_aircraft(self, newpath: str) -> bool:
+        """Update cockpit aircraft from sim path. Returns True if simulator metadata refresh was
+        triggered (async loader or synchronous aircraft_changed); False if early exit (unchanged, etc.)."""
         # We arrive here when sim/aircraft/view/acf_relative_path changed
         value = newpath
         if value is None or type(value) is not str:
             logger.warning(f"aircraft path invalid value {value}, ignoring")
-            return
+            return False
 
         # Path is like Aircraft/Extra Aircraft/ToLiss A321/liveries/F Airways (OO-PMA)/A330-900_StdDef.acf
         acname = Aircraft.get_aircraft_name_from_aircraft_path(os.path.dirname(value))
@@ -1891,11 +1893,11 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
 
         if self.mode > 0:
             logger.info("Cockpitdecks aircraft --fixed or demo mode, aircraft not changed")
-            return
+            return False
 
         if acname == self.aircraft.name:
             logger.info(f"aircraft unchanged ({self.aircraft.name}, {self.aircraft.acpath})")
-            return
+            return False
 
         # We need to find the acpath
         acpath = self.get_aircraft_path(acname)
@@ -1905,13 +1907,14 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
             # Still refresh simulator metadata: X-Plane renumbers dataref ids per aircraft load.
             if self.sim is not None:
                 self.sim.aircraft_changed()
-            return
+            return True
 
         # We try to see if we have a new livery as well
         liveryvalue = self.get_variable_value(name=Variable.internal_variable_name(LIVERY_CHANGE_MONITORING))
         if liveryvalue is None or type(liveryvalue) is not str:
             logger.warning(f"{LIVERY_CHANGE_MONITORING} has invalid value {liveryvalue}, ignoring livery change")
         self.schedule_aircraft_change(acname=acname, acpath=acpath, liverypath=liveryvalue if type(liveryvalue) is str else None)
+        return True
 
     def schedule_aircraft_change(self, acname: str, acpath: str, liverypath: str | None = None):
         with self._aircraft_change_lock:
