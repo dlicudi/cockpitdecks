@@ -1878,14 +1878,12 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
             else:
                 logger.info("not reloading on livery change")
 
-    def change_aircraft(self, newpath: str) -> bool:
-        """Update cockpit aircraft from sim path. Returns True if simulator metadata refresh was
-        triggered (async loader or synchronous aircraft_changed); False if early exit (unchanged, etc.)."""
+    def change_aircraft(self, newpath: str):
         # We arrive here when sim/aircraft/view/acf_relative_path changed
         value = newpath
         if value is None or type(value) is not str:
             logger.warning(f"aircraft path invalid value {value}, ignoring")
-            return False
+            return
 
         # Path is like Aircraft/Extra Aircraft/ToLiss A321/liveries/F Airways (OO-PMA)/A330-900_StdDef.acf
         acname = Aircraft.get_aircraft_name_from_aircraft_path(os.path.dirname(value))
@@ -1893,11 +1891,11 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
 
         if self.mode > 0:
             logger.info("Cockpitdecks aircraft --fixed or demo mode, aircraft not changed")
-            return False
+            return
 
         if acname == self.aircraft.name:
             logger.info(f"aircraft unchanged ({self.aircraft.name}, {self.aircraft.acpath})")
-            return False
+            return
 
         # We need to find the acpath
         acpath = self.get_aircraft_path(acname)
@@ -1907,14 +1905,13 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
             # Still refresh simulator metadata: X-Plane renumbers dataref ids per aircraft load.
             if self.sim is not None:
                 self.sim.aircraft_changed()
-            return True
+            return
 
         # We try to see if we have a new livery as well
         liveryvalue = self.get_variable_value(name=Variable.internal_variable_name(LIVERY_CHANGE_MONITORING))
         if liveryvalue is None or type(liveryvalue) is not str:
             logger.warning(f"{LIVERY_CHANGE_MONITORING} has invalid value {liveryvalue}, ignoring livery change")
         self.schedule_aircraft_change(acname=acname, acpath=acpath, liverypath=liveryvalue if type(liveryvalue) is str else None)
-        return True
 
     def schedule_aircraft_change(self, acname: str, acpath: str, liverypath: str | None = None):
         with self._aircraft_change_lock:
@@ -2240,15 +2237,6 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
             f"FLUSH {len(dirty_buttons)} buttons: wait={wait_ms:.0f}ms render={render_ms:.0f}ms "
             f"usb_batch={batch_ms:.0f}ms total={total_ms:.0f}ms | {per_button}"
         )
-        # LEGS latency diagnostic: total time from WS receive to display update
-        legs_in_flush = any("LEGS" in b.name for b in dirty_buttons)
-        if legs_in_flush and hasattr(self, "_latency_legs_ws_at"):
-            total_legs_ms = (t_end - self._latency_legs_ws_at) * 1000
-            logger.warning(
-                f"LATENCY_LEGS T3 flush total_since_ws={total_legs_ms:.0f}ms "
-                f"(wait={wait_ms:.0f} render={render_ms:.0f} usb={batch_ms:.0f})"
-            )
-
         self._schedule_dirty_flush_if_needed()
 
     MINIMUM_FLUSH_DELAY_S = 0.080  # 80ms: let dataref batches from a single WS message accumulate before flushing
