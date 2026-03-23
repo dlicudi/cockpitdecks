@@ -501,10 +501,15 @@ class MultiTexts(IconText):
     def render(self):
         value = self.get_button_value()
         if value is None:
+            if getattr(self, "_rendered_fallback", False):
+                return None  # already rendered fallback, skip until real value arrives
             # Keep button visible while datarefs are warming up (e.g. FMS pages).
-            # Fall back to the first style instead of returning a blank tile.
+            # Render once with the first style instead of leaving a blank tile.
             logger.debug(f"button {self.button_name}: {type(self).__name__}: no current value, using default state")
+            self._rendered_fallback = True
             value = 0
+        else:
+            self._rendered_fallback = False
         if type(value) in [str, int, float]:
             value = int(float(value))  # int('1.0') does not work
         else:

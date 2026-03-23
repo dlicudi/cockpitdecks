@@ -110,6 +110,18 @@ hiddenimports += [
     "cockpitdecks_bx.buttons.representation",
 ]
 
+# Bundle libhidapi (required by StreamDeck for USB HID access).
+for _hidapi_path in [
+    "/opt/homebrew/lib/libhidapi.dylib",
+    "/usr/local/lib/libhidapi.dylib",
+]:
+    if os.path.exists(_hidapi_path):
+        binaries.append((_hidapi_path, "."))
+        print(f"[launcher.spec] bundling libhidapi: {_hidapi_path}")
+        break
+else:
+    print("[launcher.spec] warning: libhidapi.dylib not found — Stream Deck will not work in frozen builds")
+
 a = Analysis(
     ["launcher.py"],
     pathex=[

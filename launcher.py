@@ -16,5 +16,8 @@ def _launcher_fingerprint() -> str:
 
 
 if __name__ == "__main__":
+    # macOS .app bundles launch with cwd="/"; ensure a writable working directory.
+    if getattr(sys, "frozen", False):
+        os.chdir(os.path.expanduser("~"))
     print(f"[launcher-fingerprint] {_launcher_fingerprint()}", flush=True)
     runpy.run_module("cockpitdecks.start", run_name="__main__")
