@@ -5,6 +5,7 @@
 #
 #
 __path__ = __import__("pkgutil").extend_path(__path__, __name__)  # Aum
+import os
 import re
 from datetime import datetime, timezone
 
@@ -33,7 +34,7 @@ DEPRECATION = "DEPRECATION"
 SPAM_LEVEL = 15
 SPAM = "SPAM"
 
-LOGFILE = "cockpitdecks.log"
+LOGFILE = os.path.join(os.path.expanduser("~"), "cockpitdecks.log")
 FORMAT = "[%(asctime)s] %(levelname)s %(threadName)s %(filename)s:%(funcName)s:%(lineno)d: %(message)s"
 # logger name: %(name)s
 
