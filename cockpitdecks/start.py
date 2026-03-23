@@ -21,6 +21,10 @@ import argparse
 import subprocess
 import shutil
 import webbrowser
+try:
+    import resource
+except ImportError:  # pragma: no cover - not available on Windows
+    resource = None
 
 import socket
 import ipaddress
@@ -28,7 +32,7 @@ import ipaddress
 from enum import Enum
 
 from cockpitdecks import constant
-from flask import Flask, render_template, send_from_directory, send_file, request, abort
+from flask import Flask, jsonify, render_template, send_from_directory, send_file, request, abort
 from simple_websocket import Server, ConnectionClosed
 
 import ruamel
@@ -55,6 +59,9 @@ if LOGFILE is not None:
     logger.addHandler(handler)
 
 startup_logger = logging.getLogger("Cockpitdecks startup")
+PROCESS_START_TS = time.time()
+_metrics_prev_wall: float | None = None
+_metrics_prev_cpu: float | None = None
 
 
 class CD_MODE(Enum):
@@ -557,6 +564,98 @@ def aircraft_list():
 def capabilities():
     l = cockpit.get_capabilities()
     return l
+
+
+@app.route("/desktop-status", methods=["GET"])
+def desktop_status():
+    """Small JSON snapshot for external tools (e.g. Cockpitdecks Desktop). Avoids heavy /capabilities."""
+    ac = cockpit.aircraft
+    deckconfig_path = None
+    if ac.acpath is not None:
+        deckconfig_path = os.path.abspath(os.path.join(ac.acpath, CONFIG_FOLDER))
+    deck_names = sorted(ac.decks.keys()) if ac.decks else []
+    return jsonify(
+        {
+            "cockpitdecks_version": __version__,
+            "aircraft_name": ac.name or "",
+            "aircraft_path": ac.acpath,
+            "deckconfig_path": deckconfig_path,
+            "deck_names": deck_names,
+        }
+    )
+
+
+def _sample_process_cpu_percent() -> float | None:
+    """Approximate process CPU % since previous sample (single process, all cores)."""
+    global _metrics_prev_wall, _metrics_prev_cpu
+    now_wall = time.perf_counter()
+    now_cpu = time.process_time()
+    if _metrics_prev_wall is None or _metrics_prev_cpu is None:
+        _metrics_prev_wall = now_wall
+        _metrics_prev_cpu = now_cpu
+        return None
+    dw = now_wall - _metrics_prev_wall
+    dc = now_cpu - _metrics_prev_cpu
+    _metrics_prev_wall = now_wall
+    _metrics_prev_cpu = now_cpu
+    if dw <= 0:
+        return None
+    return max(0.0, (dc / dw) * 100.0)
+
+
+def _safe_len(value) -> int:
+    try:
+        return len(value) if value is not None else 0
+    except TypeError:
+        return 0
+
+
+@app.route("/desktop-metrics", methods=["GET"])
+def desktop_metrics():
+    """Small runtime/perf snapshot for Cockpitdecks Desktop."""
+    rss_mb: float | None = None
+    try:
+        if resource is not None:
+            rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+            # macOS reports bytes, Linux reports kilobytes.
+            rss_mb = (rss / (1024 * 1024)) if platform.system() == "Darwin" else (rss / 1024.0)
+    except OSError:
+        rss_mb = None
+
+    sim = getattr(cockpit, "sim", None)
+    vdb = getattr(cockpit, "variable_database", None)
+    ac = getattr(cockpit, "aircraft", None)
+    deck_count = _safe_len(getattr(ac, "decks", None))
+    pages_count = 0
+    if ac is not None and getattr(ac, "decks", None):
+        for d in ac.decks.values():
+            pages_count += _safe_len(getattr(d, "pages", None))
+
+    return jsonify(
+        {
+            "timestamp": int(time.time()),
+            "uptime_s": round(max(0.0, time.time() - PROCESS_START_TS), 3),
+            "process": {
+                "pid": os.getpid(),
+                "thread_count": threading.active_count(),
+                "cpu_percent": _sample_process_cpu_percent(),
+                "max_rss_mb": round(rss_mb, 2) if rss_mb is not None else None,
+            },
+            "cockpit": {
+                "mode": str(getattr(getattr(cockpit, "mode", None), "name", "")),
+                "decks_count": deck_count,
+                "pages_count": pages_count,
+                "registered_variables": _safe_len(getattr(vdb, "database", None)),
+            },
+            "simulator": {
+                "name": type(sim).__name__ if sim is not None else "",
+                "running": bool(getattr(sim, "running", False)),
+                "status": str(getattr(sim, "xplane_status_str", "")),
+                "datarefs_monitored": _safe_len(getattr(sim, "simulator_variable_to_monitor", None)),
+                "events_monitored": _safe_len(getattr(sim, "simulator_event_to_monitor", None)),
+            },
+        }
+    )
 
 
 @app.route("/preview", methods=("GET", "POST"))  # alias to button-designer
