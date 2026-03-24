@@ -11,9 +11,21 @@ if [[ ! -d "$VENV" ]]; then
 fi
 
 # Ensure libhidapi is visible for StreamDeck USB access.
+BREW_BIN=""
 if command -v brew &>/dev/null; then
-  BREW_PREFIX="$(brew --prefix)"
+  BREW_BIN="$(command -v brew)"
+elif [[ -x /opt/homebrew/bin/brew ]]; then
+  BREW_BIN="/opt/homebrew/bin/brew"
+elif [[ -x /usr/local/bin/brew ]]; then
+  BREW_BIN="/usr/local/bin/brew"
+fi
+
+if [[ -n "$BREW_BIN" ]]; then
+  BREW_PREFIX="$("$BREW_BIN" --prefix)"
+  export PATH="$BREW_PREFIX/bin:$BREW_PREFIX/sbin:$PATH"
+  export HOMEBREW_PREFIX="$BREW_PREFIX"
   export DYLD_LIBRARY_PATH="$BREW_PREFIX/lib${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
+  export DYLD_FALLBACK_LIBRARY_PATH="$BREW_PREFIX/lib${DYLD_FALLBACK_LIBRARY_PATH:+:$DYLD_FALLBACK_LIBRARY_PATH}"
 fi
 
 cd "$HOME"
