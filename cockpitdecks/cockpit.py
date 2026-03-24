@@ -1909,9 +1909,12 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
 
         # We try to see if we have a new livery as well
         liveryvalue = self.get_variable_value(name=Variable.internal_variable_name(LIVERY_CHANGE_MONITORING))
-        if liveryvalue is None or type(liveryvalue) is not str:
+        if liveryvalue is None:
+            logger.debug(f"{LIVERY_CHANGE_MONITORING} unavailable, skipping livery change")
+        elif not isinstance(liveryvalue, str):
             logger.warning(f"{LIVERY_CHANGE_MONITORING} has invalid value {liveryvalue}, ignoring livery change")
-        self.schedule_aircraft_change(acname=acname, acpath=acpath, liverypath=liveryvalue if type(liveryvalue) is str else None)
+            liveryvalue = None
+        self.schedule_aircraft_change(acname=acname, acpath=acpath, liverypath=liveryvalue if isinstance(liveryvalue, str) else None)
 
     def schedule_aircraft_change(self, acname: str, acpath: str, liverypath: str | None = None):
         with self._aircraft_change_lock:
