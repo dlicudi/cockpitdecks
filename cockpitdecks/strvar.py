@@ -66,7 +66,8 @@ class StringWithVariables(Variable, VariableListener):
             logger.debug(f"message {self.display_name}: using variables {', '.join(self._tokens.keys())}/{self._variables}")
             for varname in self._tokens.values():
                 if not Variable.is_state_variable(varname):
-                    v = self.owner.get_variable(varname)
+                    want_string = self.data_type == "string" and Variable.is_internal_variable(varname)
+                    v = self.owner.get_variable(varname, is_string=want_string)
                     v.add_listener(self)
         if self._register_listeners and isinstance(self.owner, VariableListener):
             self.add_listener(self.owner)

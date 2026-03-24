@@ -277,6 +277,8 @@ class Deck(ABC):
             page_started_at = time.perf_counter()
             if p == CONFIG_FILE:
                 continue
+            elif p == "_docs.yaml":
+                continue
             elif not (p.lower().endswith(".yaml") or p.lower().endswith(".yml")):  # not a yaml file
                 logger.debug(f"{dn}: ignoring file {p}")
                 continue

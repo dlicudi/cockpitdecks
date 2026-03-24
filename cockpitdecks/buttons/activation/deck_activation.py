@@ -735,14 +735,14 @@ class EncoderPush(Push, EncoderProperties):
     First command is executed when encoder is pushed.
 
     Without dual option:
-    Second command is executed when the encoder is turned clockwise one step,
-    Third command is executed the encoder is turned counter-clockwise one step.
+    Second command is executed when the encoder is turned counter-clockwise one step,
+    Third command is executed when the encoder is turned clockwise one step.
 
     With longpush option:
-    Command 0: Executed when turned clockwise and not pushed
-    Command 1: Executed when turned counter-clockwise and not pushed
-    Command 2: Executed when turned clockwise and pushed simultaneously
-    Command 3: Executed when turned counter-clockwise and pushed simultaneously
+    Command 0: Executed when turned counter-clockwise and not pushed
+    Command 1: Executed when turned clockwise and not pushed
+    Command 2: Executed when turned counter-clockwise and pushed simultaneously
+    Command 3: Executed when turned clockwise and pushed simultaneously
     """
 
     ACTIVATION_NAME = "encoder-push"
@@ -1416,11 +1416,11 @@ class EncoderToggle(Activation, EncoderProperties):
     Defines a encoder with stepped value coupled to an on/off button.
 
     On
-    Command 0: Executed when turned clockwise
-    Command 1: Executed when turned counter-clockwise
+    Command 0: Executed when turned counter-clockwise
+    Command 1: Executed when turned clockwise
     Off
-    Command 2: Executed when turned clockwise
-    Command 3: Executed when turned counter-clockwise
+    Command 2: Executed when turned counter-clockwise
+    Command 3: Executed when turned clockwise
     """
 
     ACTIVATION_NAME = "encoder-toggle"

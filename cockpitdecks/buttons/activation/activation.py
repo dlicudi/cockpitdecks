@@ -116,8 +116,9 @@ class Activation(ActivationBase, VariableListener):
             self._view.button = self.button  # set button to evalute conditional
 
         # Vibrate on press, or emit/play sound (mp3 or wav only for web compatibility
-        self.vibrate = self.get_attribute("vibrate")
-        self.sound = self.get_attribute("sound")
+        # Propagate so default-vibrate / default-sound from page/deck/cockpit level is picked up
+        self.vibrate = self.get_attribute("vibrate", propagate=True)
+        self.sound = self.get_attribute("sound", propagate=True)
 
         # Long press option
         self._long_press = None

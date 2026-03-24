@@ -200,7 +200,8 @@ class Page:
                 continue
             with self._simulator_variables_lock:
                 if d not in self.simulator_variables:
-                    ref = self.sim.get_variable(d)  # creates or return already defined dataref
+                    wants_string = d == Variable.internal_variable_name("cockpitdecks/page_cycle/current_page")
+                    ref = self.sim.get_variable(d, is_string=wants_string)  # creates or return already defined dataref
                     if ref is not None:
                         if attach:
                             ref.add_listener(button)
@@ -229,7 +230,8 @@ class Page:
                 if ref is None and Variable.is_internal_variable(d):
                     # Internal variables are not stored in simulator_variables,
                     # look them up directly from the simulator/cockpit variable database.
-                    ref = self.sim.get_variable(d)
+                    wants_string = d == Variable.internal_variable_name("cockpitdecks/page_cycle/current_page")
+                    ref = self.sim.get_variable(d, is_string=wants_string)
                 if ref is not None:
                     ref.add_listener(button)
         logger.debug(f"page {self.name}: simulator variable listeners attached")

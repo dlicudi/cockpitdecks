@@ -476,12 +476,17 @@ class Aircraft:
         logger.info(f"theme is {self.theme}{f' (was {before})' if before is not None else ''}")
 
         sn = os.path.join(self.acpath, CONFIG_FOLDER, SECRET_FILE)
-        serial_numbers = Config(sn)
-        if not serial_numbers.is_valid():
-            self._secret = {}
-            logger.warning(f"secret file {sn} is not valid")
-        else:
+        if not os.path.exists(sn):
+            serial_numbers = {}
             self._secret = serial_numbers
+        else:
+            serial_numbers = Config(sn)
+            if not serial_numbers.is_valid():
+                serial_numbers = {}
+                self._secret = serial_numbers
+                logger.warning(f"secret file {sn} is not valid")
+            else:
+                self._secret = serial_numbers
 
         # 1. Adjust some settings in global config file.
         if self.sim is not None:

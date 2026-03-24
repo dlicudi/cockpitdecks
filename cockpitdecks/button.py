@@ -380,7 +380,8 @@ class Button(VariableListener, SimulatorVariableValueProvider, StateVariableValu
         # If they are later used (in expression), at least they were created with STRING type first.
         stars = 3
         for d in self.get_variables():
-            ref = self.sim.get_variable(d)  # creates or return already defined dataref
+            wants_string = d == Variable.internal_variable_name("cockpitdecks/page_cycle/current_page")
+            ref = self.sim.get_variable(d, is_string=wants_string)  # creates or return already defined dataref
             if ref is not None:
                 ref.add_listener(self)
                 if Variable.is_internal_variable(d):
@@ -527,7 +528,10 @@ class Button(VariableListener, SimulatorVariableValueProvider, StateVariableValu
     def get_variable(self, name: str, is_string: bool = False) -> InternalVariable | SimulatorVariable:
         """Returns data or create a new one, internal if path requires it"""
         if self.cockpit.variable_database.exists(name):
-            return self.cockpit.variable_database.get(name)
+            t = self.cockpit.variable_database.get(name)
+            if is_string and not t.is_string:
+                t.data_type = InternalVariableType.STRING
+            return t
         if InternalVariable.is_internal_variable(path=name):
             return self.cockpit.variable_database.register(variable=self.cockpit.variable_factory(name=name, is_string=is_string, creator=self.name))
         return self.cockpit.variable_database.register(variable=self.sim.variable_factory(name=name, is_string=is_string, creator=self.name))

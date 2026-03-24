@@ -232,21 +232,31 @@ class Simulator(ABC, InstructionFactory, InstructionPerformer, VariableFactory, 
         Parent objects always know what data type their variable is. (float is default, string is explicit.)
         """
         stars = 4
+        page_cycle_current_page = Variable.internal_variable_name("cockpitdecks/page_cycle/current_page")
         if self.cockpit.variable_database.exists(name):
             t = self.cockpit.variable_database.get(name)
             if is_string and t.is_string != is_string:
-                logger.warning(f"variable {name} has type {t.data_type} vs. is_string={is_string} (create={t._creator}), forced to string" + " *" * stars)
+                if name == page_cycle_current_page:
+                    logger.debug(f"variable {name} has type {t.data_type} vs. is_string={is_string} (create={t._creator}), forced to string")
+                else:
+                    logger.warning(f"variable {name} has type {t.data_type} vs. is_string={is_string} (create={t._creator}), forced to string" + " *" * stars)
                 t.data_type = InternalVariableType.STRING
             return t
         if Variable.is_internal_variable(path=name):
             t = self.cockpit.variable_database.register(variable=self.cockpit.variable_factory(name=name, is_string=is_string, creator=self.name))
             if is_string and t.is_string != is_string:
-                logger.warning(f"variable {name} has type {t.data_type} vs. is_string={is_string} (create={t._creator}), forced to string" + " *" * stars)
+                if name == page_cycle_current_page:
+                    logger.debug(f"variable {name} has type {t.data_type} vs. is_string={is_string} (create={t._creator}), forced to string")
+                else:
+                    logger.warning(f"variable {name} has type {t.data_type} vs. is_string={is_string} (create={t._creator}), forced to string" + " *" * stars)
                 t.data_type = InternalVariableType.STRING
             return t
         t = self.cockpit.variable_database.register(variable=self.variable_factory(name=name, is_string=is_string, creator=self.name))
         if is_string and t.is_string != is_string:
-            logger.warning(f"variable {name} has type {t.data_type} vs. is_string={is_string} (create={t._creator}), forced to string" + " *" * stars)
+            if name == page_cycle_current_page:
+                logger.debug(f"variable {name} has type {t.data_type} vs. is_string={is_string} (create={t._creator}), forced to string")
+            else:
+                logger.warning(f"variable {name} has type {t.data_type} vs. is_string={is_string} (create={t._creator}), forced to string" + " *" * stars)
             t.data_type = InternalVariableType.STRING
         return t
 
@@ -556,7 +566,7 @@ class SimulatorVariableListener(VariableListener):
         if isinstance(data, SimulatorVariable) or (isinstance(data, Formula) and data._has_sim_vars):  # could be a formula that has sim vars.
             self.simulator_variable_changed(data=data)
         else:
-            logger.warning(f"non simulator variable {data.name} for listener {self.vl_name} ({type(data)}), ignored")
+            logger.debug(f"non simulator variable {data.name} for listener {self.vl_name} ({type(data)}), ignored")
 
     @abstractmethod
     def simulator_variable_changed(self, data: SimulatorVariable):
