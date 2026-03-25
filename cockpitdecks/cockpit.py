@@ -2153,6 +2153,7 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
             if not self._dirty_buttons:
                 self._first_dirty_time = time.monotonic()
             self._dirty_buttons[button.get_id()] = button
+        self._dirty_marks = getattr(self, "_dirty_marks", 0) + 1
         self._schedule_dirty_flush_if_needed()
 
     def flush_dirty_buttons(self):
@@ -2232,6 +2233,9 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
 
         t_end = time.monotonic()
 
+        self._dirty_flushes = getattr(self, "_dirty_flushes", 0) + 1
+        self._dirty_rendered = getattr(self, "_dirty_rendered", 0) + len(dirty_buttons)
+
         render_ms = (t_render_done - t_batch_start) * 1000
         batch_ms = (t_end - t_render_done) * 1000
         total_ms = (t_end - t_start) * 1000
@@ -2242,7 +2246,7 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
         )
         self._schedule_dirty_flush_if_needed()
 
-    MINIMUM_FLUSH_DELAY_S = 0.080  # 80ms: let dataref batches from a single WS message accumulate before flushing
+    MINIMUM_FLUSH_DELAY_S = 0.150  # 150ms: let dataref batches accumulate before flushing (~7 fps)
 
     def _schedule_dirty_flush_if_needed(self):
         with self._dirty_buttons_lock:

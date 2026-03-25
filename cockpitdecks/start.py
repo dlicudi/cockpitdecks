@@ -610,6 +610,21 @@ def _safe_len(value) -> int:
         return 0
 
 
+def _dataref_traffic_stats(sim) -> dict:
+    """Extract WebSocket traffic counters from the simulator's xpwebapi _stats dict."""
+    if sim is None:
+        return {}
+    stats = getattr(sim, "_stats", None)
+    if not isinstance(stats, dict):
+        return {}
+    return {
+        "ws_messages_received": stats.get("receive", 0),
+        "dataref_updates_received": stats.get("response_update", 0),
+        "dataref_values_processed": stats.get("update_dataref", 0),
+        "batch_events": stats.get("batch_events", 0),
+    }
+
+
 @app.route("/desktop-metrics", methods=["GET"])
 def desktop_metrics():
     """Small runtime/perf snapshot for Cockpitdecks Desktop."""
@@ -646,6 +661,10 @@ def desktop_metrics():
                 "decks_count": deck_count,
                 "pages_count": pages_count,
                 "registered_variables": _safe_len(getattr(vdb, "database", None)),
+                "dirty_marks": getattr(cockpit, "_dirty_marks", 0),
+                "dirty_flushes": getattr(cockpit, "_dirty_flushes", 0),
+                "dirty_rendered": getattr(cockpit, "_dirty_rendered", 0),
+                "event_queue_depth": cockpit.event_queue.qsize() + cockpit.priority_event_queue.qsize(),
             },
             "simulator": {
                 "name": type(sim).__name__ if sim is not None else "",
@@ -654,6 +673,7 @@ def desktop_metrics():
                 "datarefs_monitored": _safe_len(getattr(sim, "simulator_variable_to_monitor", None)),
                 "events_monitored": _safe_len(getattr(sim, "simulator_event_to_monitor", None)),
             },
+            "dataref_traffic": _dataref_traffic_stats(sim),
         }
     )
 

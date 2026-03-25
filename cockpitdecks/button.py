@@ -691,24 +691,11 @@ class Button(VariableListener, SimulatorVariableValueProvider, StateVariableValu
 
         logger.debug(f"button {self.name}: {data.name} changed")
 
-        if data == self._value:
-            logger.log(SPAM_LEVEL, "self value changed, rendering")
-            self.request_render()
-            return
-
-        self.value = self.compute_value()
-        if self.has_changed():
-            if isinstance(data, InternalVariable):
-                logger.info(f"button {self.name}: internal var change detected, requesting render (prev={self.previous_value}, curr={self.current_value})")
-            logger.log(
-                SPAM_LEVEL,
-                f"button {self.name}: {self.previous_value} -> {self.current_value}",
-            )
-            self.request_render()
-        else:
-            if isinstance(data, InternalVariable):
-                logger.info(f"button {self.name}: internal var changed but has_changed()=False (prev={self.previous_value}, curr={self.current_value})")
-            logger.debug(f"button {self.name}: no change")
+        # Mark button dirty immediately — the dirty buffer deduplicates by button ID
+        # and the flush timer batches renders. Skipping the expensive compute_value()
+        # here avoids the event queue bottleneck; value is computed at render time.
+        logger.debug(f"button {self.name}: {data.name} changed, marking dirty")
+        self.request_render()
 
     def activate(self, event) -> bool:
         """

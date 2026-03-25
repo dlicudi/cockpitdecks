@@ -659,7 +659,7 @@ class Annunciator(DrawBase):
         total_started_at = time.perf_counter()
 
         # Check render state cache: skip all PIL work if nothing changed
-        states = self.button.value if isinstance(self.button.value, dict) else self.get_current_values()
+        states = self.get_current_values()
         if self._cached_image is not None and states == self._cached_render_states:
             logger.debug(f"button {self.button.name}: annunciator cache hit, skipping render")
             return self._cached_image.copy()
