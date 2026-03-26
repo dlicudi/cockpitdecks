@@ -151,3 +151,18 @@ For CI verification without creating a GitHub Release, run `.github/workflows/bu
 Recompilation of rt-midi on MacOS < 15 may require the specification of
 
 export CPLUS_INCLUDE_PATH=/opt/homebrew/Caskroom/miniforge/base/include/c++/v1
+
+## Local Dev Desktop
+
+Run the sibling desktop checkout against this repo's local launcher with:
+
+```sh
+make run
+```
+
+This uses:
+
+- `../cockpitdecks-desktop/.venv/bin/python -m cockpitdecks_desktop.app`
+- `./dist/cockpitdecks-launcher`
+
+The target builds `dist/cockpitdecks-launcher` first if needed. In dev mode, the desktop app resolves that launcher path itself.

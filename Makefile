@@ -47,6 +47,20 @@ demo:
 	clear
 	@cockpitdecks-cli --demo --fixed -p $(DEV_PACKAGES)
 
+run:
+	clear
+	@if [ ! -x "../cockpitdecks-desktop/.venv/bin/python" ]; then \
+		echo "[run] cockpitdecks-desktop python not found at ../cockpitdecks-desktop/.venv/bin/python"; \
+		exit 1; \
+	fi
+	@if [ ! -x "dist/cockpitdecks-launcher" ]; then \
+		echo "[run] launcher not found at dist/cockpitdecks-launcher"; \
+		echo "[run] building launcher first"; \
+		./scripts/build_launcher.sh; \
+	fi
+	@PYTHONPATH="../cockpitdecks-desktop/src${PYTHONPATH:+:$$PYTHONPATH}" \
+	../cockpitdecks-desktop/.venv/bin/python -m cockpitdecks_desktop.app
+
 flight:
 	clear
 	@cockpitdecks-cli -p $(DEV_PACKAGES)
