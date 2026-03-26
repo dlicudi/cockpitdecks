@@ -1002,7 +1002,11 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
             if deck_driver == VIRTUAL_DECK_DRIVER:
                 # will be added later, when we have acpath set, in add virtual_decks()
                 continue
-            decks = builder[1]().enumerate()
+            try:
+                decks = builder[1]().enumerate()
+            except Exception as exc:
+                logger.warning(f"device scan failed for {deck_driver}: {exc}", exc_info=True)
+                continue
             logger.info(f"found {len(decks)} {deck_driver}")
             for name, device in enumerate(decks):
                 device.open()

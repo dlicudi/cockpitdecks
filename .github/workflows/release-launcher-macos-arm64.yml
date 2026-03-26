@@ -72,6 +72,8 @@ jobs:
             XPLANE_WEBAPI_REF
             PYTHON_LOUPEDECK_LIVE_REPOSITORY
             PYTHON_LOUPEDECK_LIVE_REF
+            PYTHON_ELGATO_STREAMDECK_REPOSITORY
+            PYTHON_ELGATO_STREAMDECK_REF
           )
 
           for var_name in "${required_vars[@]}"; do
@@ -102,6 +104,7 @@ jobs:
             echo "- cockpitdecks_bx: \`${COCKPITDECKS_BX_REPOSITORY}@${COCKPITDECKS_BX_REF}\`"
             echo "- xplane-webapi: \`${XPLANE_WEBAPI_REPOSITORY}@${XPLANE_WEBAPI_REF}\`"
             echo "- python-loupedeck-live: \`${PYTHON_LOUPEDECK_LIVE_REPOSITORY}@${PYTHON_LOUPEDECK_LIVE_REF}\`"
+            echo "- python-elgato-streamdeck: \`${PYTHON_ELGATO_STREAMDECK_REPOSITORY}@${PYTHON_ELGATO_STREAMDECK_REF}\`"
           } >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Check cross-repo token configuration
@@ -177,6 +180,14 @@ jobs:
           path: python-loupedeck-live
           token: ${{ secrets.GH_PAT || github.token }}
 
+      - name: Checkout python-elgato-streamdeck
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.PYTHON_ELGATO_STREAMDECK_REPOSITORY }}
+          ref: ${{ env.PYTHON_ELGATO_STREAMDECK_REF }}
+          path: python-elgato-streamdeck
+          token: ${{ secrets.GH_PAT || github.token }}
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -186,7 +197,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('cockpitdecks/pyproject.toml', 'cockpitdecks/cockpitdecks-launcher.spec', 'cockpitdecks/.github/launcher-macos-arm64.env', 'cockpitdecks_xp/pyproject.toml', 'cockpitdecks_ld/pyproject.toml', 'cockpitdecks_sd/pyproject.toml', 'cockpitdecks_wm/pyproject.toml', 'cockpitdecks_ext/pyproject.toml', 'cockpitdecks_bx/pyproject.toml', 'xplane-webapi/pyproject.toml', 'python-loupedeck-live/pyproject.toml') }}
+          key: ${{ runner.os }}-pip-${{ hashFiles('cockpitdecks/pyproject.toml', 'cockpitdecks/cockpitdecks-launcher.spec', 'cockpitdecks/pyinstaller_runtime_hook.py', 'cockpitdecks/.github/launcher-macos-arm64.env', 'cockpitdecks_xp/pyproject.toml', 'cockpitdecks_ld/pyproject.toml', 'cockpitdecks_sd/pyproject.toml', 'cockpitdecks_wm/pyproject.toml', 'cockpitdecks_ext/pyproject.toml', 'cockpitdecks_bx/pyproject.toml', 'xplane-webapi/pyproject.toml', 'python-loupedeck-live/pyproject.toml', 'python-elgato-streamdeck/setup.py', 'python-elgato-streamdeck/src/StreamDeck/Transport/LibUSBHIDAPI.py') }}
           restore-keys: |
             ${{ runner.os }}-pip-
 
@@ -200,8 +211,10 @@ jobs:
           . .venv/bin/activate
           python -m pip install --upgrade pip setuptools wheel hatchling editables
           python -m pip install pyinstaller requests-cache
+          python -m pip uninstall -y streamdeck || true
           python -m pip uninstall -y loupedeck || true
           python -m pip install --no-build-isolation -e ../xplane-webapi
+          python -m pip install --no-build-isolation -e ../python-elgato-streamdeck
           python -m pip install --no-build-isolation -e ../cockpitdecks_bx
           python -m pip install --no-build-isolation -e ../cockpitdecks_ext
           python -m pip install --no-build-isolation -e ../cockpitdecks_wm
@@ -221,6 +234,16 @@ jobs:
           print(f"[verify] Loupedeck import -> {resolved}")
           if not resolved.startswith(expected_root + os.sep):
               raise SystemExit(f"Loupedeck import is not local: {resolved} (expected under {expected_root})")
+          PY
+          python - <<'PY'
+          import StreamDeck
+          import os
+
+          expected_root = os.path.realpath(os.path.join(os.getcwd(), "..", "python-elgato-streamdeck"))
+          resolved = os.path.realpath(StreamDeck.__file__)
+          print(f"[verify] StreamDeck import -> {resolved}")
+          if not resolved.startswith(expected_root + os.sep):
+              raise SystemExit(f"StreamDeck import is not local: {resolved} (expected under {expected_root})")
           PY
 
       - name: Write build metadata
@@ -253,6 +276,7 @@ jobs:
               "cockpitdecks_bx": {"path": os.path.join(workspace, "cockpitdecks_bx"), "distribution": "cockpitdecks_bx"},
               "xplane-webapi": {"path": os.path.join(workspace, "xplane-webapi"), "distribution": "xpwebapi"},
               "python-loupedeck-live": {"path": os.path.join(workspace, "python-loupedeck-live"), "distribution": "loupedeck"},
+              "python-elgato-streamdeck": {"path": os.path.join(workspace, "python-elgato-streamdeck"), "distribution": "streamdeck"},
           }
 
           def git(repo_path: str, *args: str) -> str:
