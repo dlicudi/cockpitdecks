@@ -40,6 +40,17 @@ def _module_file(module_name: str) -> str:
     return _real(mod_file)
 
 
+def _bundle_first_existing(candidates: list[str], description: str) -> str | None:
+    for candidate in candidates:
+        candidate = _real(candidate)
+        if os.path.exists(candidate):
+            binaries.append((candidate, "."))
+            print(f"[launcher.spec] bundling {description}: {candidate}")
+            return candidate
+    print(f"[launcher.spec] warning: {description} not found")
+    return None
+
+
 def _assert_local_imports():
     expected_roots = {
         "cockpitdecks": os.path.join(_WORKSPACE, "cockpitdecks"),
@@ -111,16 +122,31 @@ hiddenimports += [
 ]
 
 # Bundle libhidapi (required by StreamDeck for USB HID access).
-for _hidapi_path in [
+_bundle_first_existing([
     "/opt/homebrew/lib/libhidapi.dylib",
     "/usr/local/lib/libhidapi.dylib",
+], "libhidapi.dylib")
+
+# Bundle Cairo and its direct native dependencies used by CairoSVG/cairocffi on macOS.
+for _description, _candidates in [
+    ("libcairo.2.dylib", ["/opt/homebrew/lib/libcairo.2.dylib", "/usr/local/lib/libcairo.2.dylib"]),
+    ("libcairo-gobject.2.dylib", ["/opt/homebrew/lib/libcairo-gobject.2.dylib", "/usr/local/lib/libcairo-gobject.2.dylib"]),
+    ("libpixman-1.0.dylib", ["/opt/homebrew/opt/pixman/lib/libpixman-1.0.dylib", "/usr/local/opt/pixman/lib/libpixman-1.0.dylib"]),
+    ("libpng16.16.dylib", ["/opt/homebrew/opt/libpng/lib/libpng16.16.dylib", "/usr/local/opt/libpng/lib/libpng16.16.dylib"]),
+    ("libfontconfig.1.dylib", ["/opt/homebrew/opt/fontconfig/lib/libfontconfig.1.dylib", "/usr/local/opt/fontconfig/lib/libfontconfig.1.dylib"]),
+    ("libfreetype.6.dylib", ["/opt/homebrew/opt/freetype/lib/libfreetype.6.dylib", "/usr/local/opt/freetype/lib/libfreetype.6.dylib"]),
+    ("libX11.6.dylib", ["/opt/homebrew/opt/libx11/lib/libX11.6.dylib", "/usr/local/opt/libx11/lib/libX11.6.dylib"]),
+    ("libXext.6.dylib", ["/opt/homebrew/opt/libxext/lib/libXext.6.dylib", "/usr/local/opt/libxext/lib/libXext.6.dylib"]),
+    ("libXrender.1.dylib", ["/opt/homebrew/opt/libxrender/lib/libXrender.1.dylib", "/usr/local/opt/libxrender/lib/libXrender.1.dylib"]),
+    ("libxcb.1.dylib", ["/opt/homebrew/opt/libxcb/lib/libxcb.1.dylib", "/usr/local/opt/libxcb/lib/libxcb.1.dylib"]),
+    ("libxcb-render.0.dylib", ["/opt/homebrew/opt/libxcb/lib/libxcb-render.0.dylib", "/usr/local/opt/libxcb/lib/libxcb-render.0.dylib"]),
+    ("libxcb-shm.0.dylib", ["/opt/homebrew/opt/libxcb/lib/libxcb-shm.0.dylib", "/usr/local/opt/libxcb/lib/libxcb-shm.0.dylib"]),
+    ("libXau.6.dylib", ["/opt/homebrew/opt/libxau/lib/libXau.6.dylib", "/usr/local/opt/libxau/lib/libXau.6.dylib"]),
+    ("libXdmcp.6.dylib", ["/opt/homebrew/opt/libxdmcp/lib/libXdmcp.6.dylib", "/usr/local/opt/libxdmcp/lib/libXdmcp.6.dylib"]),
+    ("libglib-2.0.0.dylib", ["/opt/homebrew/opt/glib/lib/libglib-2.0.0.dylib", "/usr/local/opt/glib/lib/libglib-2.0.0.dylib"]),
+    ("libgobject-2.0.0.dylib", ["/opt/homebrew/opt/glib/lib/libgobject-2.0.0.dylib", "/usr/local/opt/glib/lib/libgobject-2.0.0.dylib"]),
 ]:
-    if os.path.exists(_hidapi_path):
-        binaries.append((_hidapi_path, "."))
-        print(f"[launcher.spec] bundling libhidapi: {_hidapi_path}")
-        break
-else:
-    print("[launcher.spec] warning: libhidapi.dylib not found — Stream Deck will not work in frozen builds")
+    _bundle_first_existing(_candidates, _description)
 
 a = Analysis(
     ["launcher.py"],
@@ -134,7 +160,7 @@ a = Analysis(
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=[],
+    runtime_hooks=[os.path.abspath(os.path.join(os.getcwd(), "pyinstaller_runtime_hook.py"))],
     excludes=[],
     noarchive=False,
 )

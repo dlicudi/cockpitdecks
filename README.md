@@ -141,6 +141,7 @@ This keeps the launcher release reproducible even when the dependency repos keep
 - If a package is not installed, the spec logs the `collect_all` failure and continues.
 - Some backends are only needed for specific devices or integrations, so the bundled app may still be valid even if not every optional package is present.
 - `cockpitdecks_ext` currently uses a stack tag in the manifest because that repo does not yet expose a matching semantic-version tag.
+- The launcher spec also bundles the native Cairo dylib set used by `CairoSVG` and preloads those bundled libraries at startup so the frozen app does not rely on a Homebrew Cairo install being discoverable at runtime.
 
 ## Developer note
 
