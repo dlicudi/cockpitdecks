@@ -191,7 +191,7 @@ jobs:
             ${{ runner.os }}-pip-
 
       - name: Install macOS launcher build dependencies
-        run: brew install hidapi
+        run: brew install hidapi cairo
 
       - name: Create build virtualenv
         working-directory: cockpitdecks
