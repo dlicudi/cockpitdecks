@@ -122,10 +122,11 @@ hiddenimports += [
 ]
 
 # Bundle libhidapi (required by StreamDeck for USB HID access).
-_bundle_first_existing([
-    "/opt/homebrew/lib/libhidapi.dylib",
-    "/usr/local/lib/libhidapi.dylib",
-], "libhidapi.dylib")
+for _description, _candidates in [
+    ("libhidapi.0.dylib", ["/opt/homebrew/opt/hidapi/lib/libhidapi.0.dylib", "/usr/local/opt/hidapi/lib/libhidapi.0.dylib"]),
+    ("libhidapi.dylib", ["/opt/homebrew/lib/libhidapi.dylib", "/usr/local/lib/libhidapi.dylib"]),
+]:
+    _bundle_first_existing(_candidates, _description)
 
 # Bundle Cairo and its direct native dependencies used by CairoSVG/cairocffi on macOS.
 for _description, _candidates in [

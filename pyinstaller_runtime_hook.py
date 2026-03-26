@@ -74,14 +74,19 @@ def _load_bundled_hidapi() -> None:
     _prepend_env_path("DYLD_FALLBACK_LIBRARY_PATH", base_dir)
     _prepend_env_path("DYLD_LIBRARY_PATH", base_dir)
 
-    hidapi_path = os.path.join(base_dir, "libhidapi.dylib")
-    if not os.path.exists(hidapi_path):
+    hidapi_candidates = [
+        os.path.join(base_dir, "libhidapi.0.dylib"),
+        os.path.join(base_dir, "libhidapi.dylib"),
+    ]
+    hidapi_path = next((p for p in hidapi_candidates if os.path.exists(p)), None)
+    if not hidapi_path:
         return
 
     hidapi_aliases = {
         "hidapi",
         "hidapi-libusb",
         "libhidapi",
+        "libhidapi.0",
     }
 
     original_find_library = ctypes.util.find_library
@@ -96,7 +101,7 @@ def _load_bundled_hidapi() -> None:
     try:
         ctypes.CDLL(hidapi_path, mode=ctypes.RTLD_GLOBAL)
     except OSError as exc:
-        print(f"[pyinstaller_runtime_hook] warning: failed to preload libhidapi.dylib: {exc}", flush=True)
+        print(f"[pyinstaller_runtime_hook] warning: failed to preload {os.path.basename(hidapi_path)}: {exc}", flush=True)
 
 
 _load_bundled_cairo()
