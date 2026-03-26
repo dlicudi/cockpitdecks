@@ -110,23 +110,37 @@ The generated executable is named `cockpitdecks-launcher`.
 GitHub Actions can build and publish a macOS arm64 launcher release from this repo.
 
 - Workflow: `.github/workflows/release-launcher-macos-arm64.yml`
+- Dependency manifest: `.github/launcher-macos-arm64.env`
 - Trigger: push a tag matching `launcher-v*`
+- Manual trigger: `workflow_dispatch` with a required `release_tag`
 - Runner: `macos-14`
 - Output artifact: `cockpitdecks-launcher-macos-arm64-<tag>.tar.gz`
+- Release metadata: `build-metadata.json`
 
 Example:
 
 ```sh
-git tag launcher-v0.1.0
-git push origin launcher-v0.1.0
+git tag launcher-v15.15.0-1
+git push origin launcher-v15.15.0-1
 ```
 
-The workflow checks out the sibling Cockpitdecks repos into the workspace layout expected by `cockpitdecks-launcher.spec`, builds `dist/cockpitdecks-launcher`, verifies it is `arm64`, and uploads the release tarball plus a SHA-256 checksum.
+The workflow checks out the sibling Cockpitdecks repos into the workspace layout expected by `cockpitdecks-launcher.spec`, using the exact refs pinned in `.github/launcher-macos-arm64.env`. It then builds `dist/cockpitdecks-launcher`, verifies it is `arm64`, records the resolved commits and Python distribution versions in `build-metadata.json`, and uploads the tarball plus a SHA-256 checksum.
+
+When recreating the build environment, the workflow installs the local repos with `--no-build-isolation` and removes any pre-existing wheel install of `loupedeck` first. This avoids accidentally freezing a PyPI copy instead of the checked-out `python-loupedeck-live` repository.
+
+Recommended release flow:
+
+1. Update `.github/launcher-macos-arm64.env` to the dependency refs you want to ship.
+2. Commit that manifest change in `cockpitdecks`.
+3. Push a launcher release tag such as `launcher-v15.15.0-1`.
+
+This keeps the launcher release reproducible even when the dependency repos keep moving.
 
 ### Notes
 
 - If a package is not installed, the spec logs the `collect_all` failure and continues.
 - Some backends are only needed for specific devices or integrations, so the bundled app may still be valid even if not every optional package is present.
+- `cockpitdecks_ext` currently uses a stack tag in the manifest because that repo does not yet expose a matching semantic-version tag.
 
 ## Developer note
 
