@@ -824,6 +824,7 @@ class Button(VariableListener, SimulatorVariableValueProvider, StateVariableValu
                 # Instruction to render has to come from "parent" button.
                 try:
                     self._last_render_at = time.monotonic()
+                    self.value = self.compute_value()
                     self.deck.render(self)
                     logger.log(SPAM_LEVEL, f"RENDER {self.name} ({self.value})")
                 except:

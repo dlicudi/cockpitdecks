@@ -674,6 +674,7 @@ def desktop_metrics():
                 "events_monitored": _safe_len(getattr(sim, "simulator_event_to_monitor", None)),
             },
             "dataref_traffic": _dataref_traffic_stats(sim),
+            "diagnostics": cockpit.get_diagnostics() if hasattr(cockpit, "get_diagnostics") else {},
         }
     )
 

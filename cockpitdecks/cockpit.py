@@ -649,6 +649,30 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
         self._event_loop_events_since_report = 0
         self._event_loop_total_duration_ms = 0.0
         self._event_loop_max_duration_ms = 0.0
+
+        # Diagnostics: event loop timing
+        self._diag_event_count = 0
+        self._diag_event_total_ms = 0.0
+        self._diag_event_max_ms = 0.0
+        self._diag_event_slow_count = 0  # events > 50ms
+        self._diag_event_last_type = ""
+        self._diag_event_last_ms = 0.0
+
+        # Diagnostics: flush/render timing
+        self._diag_flush_count = 0
+        self._diag_flush_total_ms = 0.0
+        self._diag_flush_max_ms = 0.0
+        self._diag_flush_last_ms = 0.0
+        self._diag_flush_last_buttons = 0
+        self._diag_render_total_ms = 0.0
+        self._diag_render_max_ms = 0.0
+        self._diag_usb_total_ms = 0.0
+
+        # Diagnostics: page change timing
+        self._diag_page_change_count = 0
+        self._diag_page_change_last_ms = 0.0
+        self._diag_page_change_last_page = ""
+        self._diag_page_change_max_ms = 0.0
         self._aircraft_change_lock = threading.Lock()
         self._aircraft_change_thread = None
         self._pending_aircraft_change = None
@@ -2126,7 +2150,17 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
                         if EVENTLOGFILE is not None and (LOG_SIMULATOR_VARIABLE_EVENTS or not isinstance(e, SimulatorEvent)) and not e.is_replay():
                             # we do not enqueue events that are replayed
                             event_logger.info(e.to_json())
+                        t_evt_start = time.monotonic()
                         e.run(just_do_it=True)
+                        t_evt_ms = (time.monotonic() - t_evt_start) * 1000
+                        self._diag_event_count += 1
+                        self._diag_event_total_ms += t_evt_ms
+                        if t_evt_ms > self._diag_event_max_ms:
+                            self._diag_event_max_ms = t_evt_ms
+                        if t_evt_ms > self._event_loop_slow_event_ms:
+                            self._diag_event_slow_count += 1
+                        self._diag_event_last_type = type(e).__name__
+                        self._diag_event_last_ms = t_evt_ms
                         logger.debug("..done without error")
                     except:
                         logger.warning("..done with error", exc_info=True)
@@ -2239,6 +2273,19 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
         render_ms = (t_render_done - t_batch_start) * 1000
         batch_ms = (t_end - t_render_done) * 1000
         total_ms = (t_end - t_start) * 1000
+
+        # Diagnostics: accumulate flush timing
+        self._diag_flush_count += 1
+        self._diag_flush_total_ms += total_ms
+        self._diag_flush_last_ms = total_ms
+        self._diag_flush_last_buttons = len(dirty_buttons)
+        if total_ms > self._diag_flush_max_ms:
+            self._diag_flush_max_ms = total_ms
+        self._diag_render_total_ms += render_ms
+        if render_ms > self._diag_render_max_ms:
+            self._diag_render_max_ms = render_ms
+        self._diag_usb_total_ms += batch_ms
+
         per_button = " ".join(f"{name}={ms:.0f}ms" for name, ms in sorted(render_times.items(), key=lambda x: -x[1]))
         logger.debug(
             f"FLUSH {len(dirty_buttons)} buttons: wait={wait_ms:.0f}ms render={render_ms:.0f}ms "
@@ -2246,7 +2293,17 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
         )
         self._schedule_dirty_flush_if_needed()
 
-    MINIMUM_FLUSH_DELAY_S = 0.150  # 150ms: let dataref batches accumulate before flushing (~7 fps)
+    MINIMUM_FLUSH_DELAY_S = 0.100  # 100ms default: let dataref batches accumulate before flushing (~10 fps)
+
+    def _get_flush_delay_s(self) -> float:
+        """Return flush delay in seconds. Overridable via render-flush-delay-ms in config.yaml."""
+        try:
+            ms = self._config.get("render-flush-delay-ms")
+            if ms is not None:
+                return max(0.010, float(ms) / 1000.0)
+        except Exception:
+            pass
+        return self.MINIMUM_FLUSH_DELAY_S
 
     def _schedule_dirty_flush_if_needed(self):
         with self._dirty_buttons_lock:
@@ -2254,13 +2311,61 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
                 return
         if self._dirty_flush_timer is not None:
             return  # already scheduled
-        self._dirty_flush_timer = threading.Timer(self.MINIMUM_FLUSH_DELAY_S, self._timer_flush)
+        self._dirty_flush_timer = threading.Timer(self._get_flush_delay_s(), self._timer_flush)
         self._dirty_flush_timer.daemon = True
         self._dirty_flush_timer.start()
 
     def _timer_flush(self):
         self._dirty_flush_timer = None
         self.flush_dirty_buttons()
+
+    def get_diagnostics(self) -> dict:
+        """Return diagnostics snapshot for /desktop-metrics."""
+        # Thread breakdown by name prefix
+        thread_counts = {}
+        for t in threading.enumerate():
+            # Group by prefix before "::" or first word
+            name = t.name
+            prefix = name.split("::")[0] if "::" in name else name.split("-")[0] if "-" in name else name
+            thread_counts[prefix] = thread_counts.get(prefix, 0) + 1
+
+        # Event loop stats
+        evt_count = self._diag_event_count
+        evt_avg = (self._diag_event_total_ms / evt_count) if evt_count > 0 else 0.0
+
+        # Flush stats
+        flush_count = self._diag_flush_count
+        flush_avg = (self._diag_flush_total_ms / flush_count) if flush_count > 0 else 0.0
+        render_avg = (self._diag_render_total_ms / flush_count) if flush_count > 0 else 0.0
+        usb_avg = (self._diag_usb_total_ms / flush_count) if flush_count > 0 else 0.0
+
+        return {
+            "threads": thread_counts,
+            "event_loop": {
+                "events_processed": evt_count,
+                "avg_ms": round(evt_avg, 2),
+                "max_ms": round(self._diag_event_max_ms, 2),
+                "slow_count": self._diag_event_slow_count,
+                "last_type": self._diag_event_last_type,
+                "last_ms": round(self._diag_event_last_ms, 2),
+            },
+            "flush": {
+                "count": flush_count,
+                "avg_ms": round(flush_avg, 2),
+                "max_ms": round(self._diag_flush_max_ms, 2),
+                "last_ms": round(self._diag_flush_last_ms, 2),
+                "last_buttons": self._diag_flush_last_buttons,
+                "render_avg_ms": round(render_avg, 2),
+                "render_max_ms": round(self._diag_render_max_ms, 2),
+                "usb_avg_ms": round(usb_avg, 2),
+            },
+            "page_change": {
+                "count": self._diag_page_change_count,
+                "last_ms": round(self._diag_page_change_last_ms, 2),
+                "last_page": self._diag_page_change_last_page,
+                "max_ms": round(self._diag_page_change_max_ms, 2),
+            },
+        }
 
     def stop_event_loop(self):
         if self.event_loop_run:

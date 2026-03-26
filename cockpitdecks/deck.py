@@ -442,6 +442,14 @@ class Deck(ABC):
             render_duration_ms = (time.perf_counter() - render_started_at) * 1000
             if render_duration_ms >= 100.0:
                 logger.info(f"deck {self.name}: page {page} render stage took {render_duration_ms:.1f}ms")
+            # Report page change timing to cockpit diagnostics
+            total_change_ms = (time.perf_counter() - render_started_at) * 1000  # render portion
+            if hasattr(self.cockpit, "_diag_page_change_count"):
+                self.cockpit._diag_page_change_count += 1
+                self.cockpit._diag_page_change_last_ms = render_duration_ms
+                self.cockpit._diag_page_change_last_page = f"{self.name}/{page}"
+                if render_duration_ms > self.cockpit._diag_page_change_max_ms:
+                    self.cockpit._diag_page_change_max_ms = render_duration_ms
             logger.debug(f"deck {self.name} ..done")
             logger.info(f"deck {self.name} changed page to {page}")
             return self.current_page.name
