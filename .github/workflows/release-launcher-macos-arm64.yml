@@ -1,0 +1,151 @@
+name: Release Launcher macOS arm64
+
+on:
+  push:
+    tags:
+      - "launcher-v*"
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release tag (e.g. launcher-v1.2.3)'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout cockpitdecks
+        uses: actions/checkout@v4
+        with:
+          path: cockpitdecks
+
+      - name: Checkout cockpitdecks_xp
+        uses: actions/checkout@v4
+        with:
+          repository: dlicudi/cockpitdecks_xp
+          path: cockpitdecks_xp
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Checkout cockpitdecks_ld
+        uses: actions/checkout@v4
+        with:
+          repository: dlicudi/cockpitdecks_ld
+          path: cockpitdecks_ld
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Checkout cockpitdecks_sd
+        uses: actions/checkout@v4
+        with:
+          repository: dlicudi/cockpitdecks_sd
+          path: cockpitdecks_sd
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Checkout cockpitdecks_wm
+        uses: actions/checkout@v4
+        with:
+          repository: dlicudi/cockpitdecks_wm
+          path: cockpitdecks_wm
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Checkout cockpitdecks_ext
+        uses: actions/checkout@v4
+        with:
+          repository: dlicudi/cockpitdecks_ext
+          path: cockpitdecks_ext
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Checkout cockpitdecks_bx
+        uses: actions/checkout@v4
+        with:
+          repository: dlicudi/cockpitdecks_bx
+          path: cockpitdecks_bx
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Checkout xplane-webapi
+        uses: actions/checkout@v4
+        with:
+          repository: dlicudi/xplane-webapi
+          path: xplane-webapi
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Checkout python-loupedeck-live
+        uses: actions/checkout@v4
+        with:
+          repository: dlicudi/python-loupedeck-live
+          path: python-loupedeck-live
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml', '**/setup.cfg', '**/requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install macOS launcher build dependencies
+        run: brew install hidapi
+
+      - name: Create build virtualenv
+        working-directory: cockpitdecks
+        run: |
+          python -m venv .venv
+          . .venv/bin/activate
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install pyinstaller
+          python -m pip install -e ../xplane-webapi
+          python -m pip install -e ../python-loupedeck-live
+          python -m pip install -e ../cockpitdecks_bx
+          python -m pip install -e ../cockpitdecks_ext
+          python -m pip install -e ../cockpitdecks_wm
+          python -m pip install -e ../cockpitdecks_sd
+          python -m pip install -e ../cockpitdecks_ld
+          python -m pip install -e ../cockpitdecks_xp
+          python -m pip install -e .
+
+      - name: Build launcher
+        working-directory: cockpitdecks
+        run: scripts/build_launcher.sh
+
+      - name: Verify launcher binary
+        working-directory: cockpitdecks
+        run: |
+          test -x dist/cockpitdecks-launcher
+          file dist/cockpitdecks-launcher
+          lipo -archs dist/cockpitdecks-launcher | grep -q "arm64"
+
+      - name: Package release artifact
+        working-directory: cockpitdecks
+        env:
+          TAG_NAME: ${{ github.event.inputs.tag_name || github.ref_name }}
+        run: |
+          ARTIFACT_BASENAME="cockpitdecks-launcher-macos-arm64-${TAG_NAME}"
+          cp dist/cockpitdecks-launcher "${ARTIFACT_BASENAME}"
+          tar -czf "${ARTIFACT_BASENAME}.tar.gz" "${ARTIFACT_BASENAME}"
+          shasum -a 256 "${ARTIFACT_BASENAME}.tar.gz" > "${ARTIFACT_BASENAME}.tar.gz.sha256"
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cockpitdecks-launcher-macos-arm64-${{ github.event.inputs.tag_name || github.ref_name }}
+          path: |
+            cockpitdecks/cockpitdecks-launcher-macos-arm64-${{ github.event.inputs.tag_name || github.ref_name }}.tar.gz
+            cockpitdecks/cockpitdecks-launcher-macos-arm64-${{ github.event.inputs.tag_name || github.ref_name }}.tar.gz.sha256
+
+      - name: Publish GitHub release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            cockpitdecks/cockpitdecks-launcher-macos-arm64-${{ github.event.inputs.tag_name || github.ref_name }}.tar.gz
+            cockpitdecks/cockpitdecks-launcher-macos-arm64-${{ github.event.inputs.tag_name || github.ref_name }}.tar.gz.sha256
+          generate_release_notes: true

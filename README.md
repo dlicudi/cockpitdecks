@@ -105,6 +105,24 @@ pyinstaller cockpitdecks-launcher.spec
 
 The generated executable is named `cockpitdecks-launcher`.
 
+### Automated macOS Apple Silicon release
+
+GitHub Actions can build and publish a macOS arm64 launcher release from this repo.
+
+- Workflow: `.github/workflows/release-launcher-macos-arm64.yml`
+- Trigger: push a tag matching `launcher-v*`
+- Runner: `macos-14`
+- Output artifact: `cockpitdecks-launcher-macos-arm64-<tag>.tar.gz`
+
+Example:
+
+```sh
+git tag launcher-v0.1.0
+git push origin launcher-v0.1.0
+```
+
+The workflow checks out the sibling Cockpitdecks repos into the workspace layout expected by `cockpitdecks-launcher.spec`, builds `dist/cockpitdecks-launcher`, verifies it is `arm64`, and uploads the release tarball plus a SHA-256 checksum.
+
 ### Notes
 
 - If a package is not installed, the spec logs the `collect_all` failure and continues.
