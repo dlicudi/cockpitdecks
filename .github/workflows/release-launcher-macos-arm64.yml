@@ -202,7 +202,6 @@ jobs:
           python -m pip install pyinstaller
           python -m pip uninstall -y loupedeck || true
           python -m pip install --no-build-isolation -e ../xplane-webapi
-          python -m pip install --no-build-isolation -e ../python-loupedeck-live
           python -m pip install --no-build-isolation -e ../cockpitdecks_bx
           python -m pip install --no-build-isolation -e ../cockpitdecks_ext
           python -m pip install --no-build-isolation -e ../cockpitdecks_wm
@@ -210,6 +209,19 @@ jobs:
           python -m pip install --no-build-isolation -e ../cockpitdecks_ld
           python -m pip install --no-build-isolation -e ../cockpitdecks_xp
           python -m pip install --no-build-isolation -e .
+          python -m pip uninstall -y loupedeck || true
+          python -m pip install --no-build-isolation -e ../python-loupedeck-live
+          python - <<'PY'
+          import Loupedeck
+          import os
+          import sys
+
+          expected_root = os.path.realpath(os.path.join(os.getcwd(), "..", "python-loupedeck-live"))
+          resolved = os.path.realpath(Loupedeck.__file__)
+          print(f"[verify] Loupedeck import -> {resolved}")
+          if not resolved.startswith(expected_root + os.sep):
+              raise SystemExit(f"Loupedeck import is not local: {resolved} (expected under {expected_root})")
+          PY
 
       - name: Write build metadata
         working-directory: cockpitdecks
