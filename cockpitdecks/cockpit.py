@@ -2300,7 +2300,7 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
         )
         self._schedule_dirty_flush_if_needed()
 
-    MINIMUM_FLUSH_DELAY_S = 0.100  # 100ms default: let dataref batches accumulate before flushing (~10 fps)
+    MINIMUM_FLUSH_DELAY_S = 0.400  # 400ms default: let dataref batches accumulate before flushing (~2.5 fps)
 
     def _get_flush_delay_s(self) -> float:
         """Return flush delay in seconds. Overridable via render-flush-delay-ms in config.yaml."""
