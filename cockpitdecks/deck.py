@@ -408,6 +408,7 @@ class Deck(ABC):
         logger.debug(f"deck {self.name} changing page to {page}..")
         if page in self.pages.keys():
             if self.current_page is not None:
+                self.cockpit.cancel_pending_flush()
                 self.cockpit.drop_dirty_buttons_for_page(self.current_page)
                 logger.debug(f"deck {self.name} unloading page {self.current_page.name}..")
                 logger.debug("..unloading simulator variables..")

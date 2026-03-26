@@ -2203,6 +2203,13 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
         if not dirty_buttons:
             return
 
+        # Discard buttons that are no longer on their deck's current page.
+        # A timer-based flush can race with a page change, causing stale
+        # buttons from the old page to render on top of the new page.
+        dirty_buttons = [b for b in dirty_buttons if b.on_current_page()]
+        if not dirty_buttons:
+            return
+
         t_start = time.monotonic()
 
         decks_involved = {button.deck for button in dirty_buttons if button.deck is not None}
@@ -2314,6 +2321,17 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
         self._dirty_flush_timer = threading.Timer(self._get_flush_delay_s(), self._timer_flush)
         self._dirty_flush_timer.daemon = True
         self._dirty_flush_timer.start()
+
+    def cancel_pending_flush(self):
+        """Cancel any scheduled dirty-button flush timer.
+
+        Called before a page change so an in-flight timer cannot push
+        stale button images after the new page has rendered.
+        """
+        timer = self._dirty_flush_timer
+        if timer is not None:
+            timer.cancel()
+            self._dirty_flush_timer = None
 
     def _timer_flush(self):
         self._dirty_flush_timer = None
