@@ -218,6 +218,11 @@ def configure_runtime_logging(data: dict) -> None:
     # Stream full DEBUG output to stdout so the desktop app can display it.
     if os.environ.get("COCKPITDECKS_ENGINE"):
         root_logger.setLevel(logging.DEBUG)
+        if not any(isinstance(h, logging.StreamHandler) and getattr(h, "stream", None) is sys.stdout for h in root_logger.handlers):
+            handler = logging.StreamHandler(sys.stdout)
+            handler.setLevel(logging.DEBUG)
+            handler.setFormatter(logging.Formatter(FORMAT))
+            root_logger.addHandler(handler)
         return
     logging_cfg = config_section(data.get("logging"), "logging")
     console_enabled = logging_cfg.get("console", True)
