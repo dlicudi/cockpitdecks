@@ -361,13 +361,17 @@ jobs:
             fi
           } > release-notes.md
 
-      - name: Publish GitHub release assets
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          target_commitish: ${{ github.sha }}
-          body_path: cockpitdecks/release-notes.md
-          files: |
-            cockpitdecks/cockpitdecks-macos-arm64-${{ env.RELEASE_TAG }}.tar.gz
-            cockpitdecks/cockpitdecks-macos-arm64-${{ env.RELEASE_TAG }}.tar.gz.sha256
-            cockpitdecks/build-metadata.json
+      - name: Publish GitHub release
+        working-directory: cockpitdecks
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT || github.token }}
+        run: |
+          set -euo pipefail
+          ARTIFACT_BASENAME="cockpitdecks-macos-arm64-${RELEASE_TAG}"
+          gh release create "${RELEASE_TAG}" \
+            --title "${RELEASE_TAG}" \
+            --notes-file release-notes.md \
+            --target "${{ github.sha }}" \
+            "${ARTIFACT_BASENAME}.tar.gz" \
+            "${ARTIFACT_BASENAME}.tar.gz.sha256" \
+            build-metadata.json
