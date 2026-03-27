@@ -53,7 +53,7 @@ toliss = ["cockpitdecks_tl @ git+https://github.com/devleaks/cockpitdecks_tl.git
 demoext = ["cockpitdecks_ext @ git+https://github.com/devleaks/cockpitdecks_ext.git"]
 # Decks
 streamdeck = ["cockpitdecks_sd @ git+https://github.com/devleaks/cockpitdecks_sd.git"]
-loupedeck = ["cockpitdecks_ld @ git+https://github.com/devleaks/cockpitdecks_ld.git"]
+loupedeck = ["cockpitdecks_ld @ git+https://github.com/dlicudi/cockpitdecks_ld.git@v1.2.2"]
 xtouchmini = ["cockpitdecks_bx @ git+https://github.com/devleaks/cockpitdecks_bx.git"]
 # For developer only
 development = [
