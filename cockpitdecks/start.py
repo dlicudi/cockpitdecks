@@ -238,6 +238,8 @@ def configure_runtime_logging(data: dict) -> None:
 
 
 def suppress_console_logging() -> None:
+    if os.environ.get("COCKPITDECKS_ENGINE"):
+        return
     root_logger = logging.getLogger()
     for handler in list(root_logger.handlers):
         if handler is _recent_log_handler:
