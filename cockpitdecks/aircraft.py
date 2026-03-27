@@ -11,7 +11,7 @@ import pickle
 import time
 from typing import TYPE_CHECKING
 
-from PIL import Image, ImageFont
+from PIL import Image, ImageFont, UnidentifiedImageError
 from cairosvg import svg2png
 
 from cockpitdecks import (
@@ -333,31 +333,43 @@ class Aircraft:
         if os.path.exists(dn):
             cache = os.path.join(dn, "_icon_cache.pickle")
             if os.path.exists(cache) and cache_icon:
-                with open(cache, "rb") as fp:
-                    self._icons = pickle.load(fp)
-                logger.info(f"{len(self._icons)} aircraft icons loaded from cache")
+                try:
+                    with open(cache, "rb") as fp:
+                        self._icons = pickle.load(fp)
+                    logger.info(f"{len(self._icons)} aircraft icons loaded from cache")
+                except Exception as exc:
+                    logger.warning(f"could not load aircraft icon cache {cache}: {exc}")
+                    self._icons = {}
             else:
                 icons = os.listdir(dn)
                 for i in icons:
                     fn = os.path.join(dn, i)
                     if has_ext(i, "png"):  # later, might load JPG as well.
-                        image = Image.open(fn)
-                        self._icons[i] = image
+                        try:
+                            with Image.open(fn) as image:
+                                image.load()
+                                self._icons[i] = image.copy()
+                        except (OSError, UnidentifiedImageError) as exc:
+                            logger.warning(f"could not load icon {fn}: {exc}")
                     elif has_ext(i, "svg"):  # Wow.
                         try:
                             fn = os.path.join(dn, i)
                             fout = fn.replace(".svg", ".png")
                             svg2png(url=fn, write_to=fout)
-                            image = Image.open(fout)
-                            self._icons[i] = image
-                        except:
+                            with Image.open(fout) as image:
+                                image.load()
+                                self._icons[i] = image.copy()
+                        except (OSError, UnidentifiedImageError):
                             logger.warning(f"could not load icon {fn}")
                             pass  # no cairosvg
 
                 if cache_icon:  # we cache both folders of icons
-                    with open(cache, "wb") as fp:
-                        pickle.dump(self._icons, fp)
-                    logger.info(f"{len(self._icons)} aircraft icons cached")
+                    try:
+                        with open(cache, "wb") as fp:
+                            pickle.dump(self._icons, fp)
+                        logger.info(f"{len(self._icons)} aircraft icons cached")
+                    except Exception as exc:
+                        logger.warning(f"could not write aircraft icon cache {cache}: {exc}")
                 else:
                     logger.info(f"{len(self._icons)} aircraft icons loaded")
 
