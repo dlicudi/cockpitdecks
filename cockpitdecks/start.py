@@ -102,41 +102,6 @@ def which(program):
     return None
 
 
-def xplane_homes(dirlist: str = "x-plane_install_12.txt") -> str:
-    """
-    retuns a list of X-Plane installation directories
-    dir1
-    dir2
-    """
-    opsys = platform.system()
-    homes = ""
-
-    if opsys == "Darwin":
-        fn = os.path.join(os.environ["HOME"], "Library", "Preferences", dirlist)
-        if os.path.exists(fn):
-            with open(fn) as fp:
-                homes = fp.read()
-        else:
-            startup_logger.info(f"x-plane installations: {fn} not found")
-    elif opsys == "Linux":
-        fn = os.path.join(os.environ["HOME"], ".x-plane", dirlist)
-        if os.path.exists(fn):
-            with open(fn) as fp:
-                homes = fp.read()
-        else:
-            startup_logger.info(f"x-plane installations: {fn} not found")
-    elif opsys == "Windows":
-        fn = os.path.join(os.environ["HOME"], "AppData", "Local", dirlist)
-        if os.path.exists(fn):
-            with open(fn) as fp:
-                homes = fp.read()
-        else:
-            startup_logger.info(f"x-plane installations: {fn} not found")
-
-    if homes != "":
-        homes = ",".join(homes.split("\n"))
-
-    return homes.strip(",")  # for extra \n in file
 
 
 def add_env(env, paths):
@@ -156,7 +121,6 @@ AIRCRAFT_DESC = "Cockpitdecks Demo"
 
 # Used values for startup
 SIMULATOR_NAME = None
-SIMULATOR_HOME = None
 SIMULATOR_HOST = None
 
 # Command-line arguments
@@ -261,99 +225,16 @@ if args.demo:
     environment[ENVIRON_KW.APP_HOST.value] = ["127.0.0.1", 7777]
 
 # #########################################@
-# Simulator and software home directory
+# Simulator
 #
-# Simulator name
-#
-# First try operating system environment:
-SIMULATOR_NAME = os.getenv(ENVIRON_KW.SIMULATOR_NAME.value)
-if SIMULATOR_NAME is None:
-    startup_logger.debug("no simulator in os env")
-
-# Second try environment file:
-if SIMULATOR_NAME is None:
-    if environment.from_filename():  # we loaded an environment
-        SIMULATOR_NAME = environment.get(ENVIRON_KW.SIMULATOR_NAME.value)
-        if SIMULATOR_NAME is None:
-            startup_logger.debug("no simulator in environment file")
-
-# Third: try x-plane installation file (os dependent):
-if SIMULATOR_NAME is None:
-    xp_homes = xplane_homes()  # os dependent
-    if xp_homes != "":
-        xp_homes = xp_homes.split(",")
-        if len(xp_homes) == 1:
-            SIMULATOR_NAME = "X-Plane"
-            SIMULATOR_HOME = xp_homes[0]
-            startup_logger.debug(f"found {SIMULATOR_NAME} in {SIMULATOR_HOME} from X-Plane installations file")
-        elif len(xp_homes) > 1:
-            SIMULATOR_NAME = "X-Plane"
-            startup_logger.warning("multiple X-Plane installations found")
-        else:
-            startup_logger.warning(f"X-Plane simulator installation file contains {xp_homes}, but no SIMULATOR_HOME identified; please specify SIMULATOR_HOME")
-    else:
-        startup_logger.warning("X-Plane simulator installation file not found or empty")
-
-
-if SIMULATOR_NAME is None:
-    if not args.demo:
-        startup_logger.warning("no simulator name")
-        sys.exit(1)
-    else:
-        SIMULATOR_NAME = "NoSimulator"
-        startup_logger.info("simulator set to default for demo")
-
-# Summary:
-if SIMULATOR_NAME is not None:
-    environment[ENVIRON_KW.SIMULATOR_NAME.value] = SIMULATOR_NAME
+SIMULATOR_NAME = "NoSimulator" if args.demo else "X-Plane"
+environment[ENVIRON_KW.SIMULATOR_NAME.value] = SIMULATOR_NAME
 startup_logger.debug(f"Simulator is {SIMULATOR_NAME}")
 
-#
-# Simulator software home directory if local:
-if SIMULATOR_HOME is None:
-    SIMULATOR_HOME = os.getenv(ENVIRON_KW.SIMULATOR_HOME.value)
-    # Then environment
-    if SIMULATOR_HOME is None:
-        startup_logger.debug("no simulator home in os env")
-
-if SIMULATOR_HOME is None:
-    SIMULATOR_HOME = environment.get(ENVIRON_KW.SIMULATOR_HOME.value)
-    if SIMULATOR_HOME is None:
-        startup_logger.debug("no simulator home in environment file")
-
-SIMULATOR_HOST = environment.get(ENVIRON_KW.SIMULATOR_HOST.value)
+SIMULATOR_HOST = os.getenv(ENVIRON_KW.SIMULATOR_HOST.value) or environment.get(ENVIRON_KW.SIMULATOR_HOST.value)
 if SIMULATOR_HOST is not None:
-    if SIMULATOR_HOME is None:
-        startup_logger.debug(f"no SIMULATOR_HOME, assume remote installation at {ENVIRON_KW.SIMULATOR_HOST.value}={SIMULATOR_HOST}")
-    else:
-        startup_logger.warning(
-            f"both software home directory ({SIMULATOR_HOME}) and remote host ({SIMULATOR_HOST}) provided; please make sure software location is consistent with Cockpitdecks (see manual)"
-        )
-
-# Check SIMULATOR_HOME
-if SIMULATOR_HOME is not None:
-    SIMULATOR_HOME = SIMULATOR_HOME.rstrip(os.sep)
-    if not os.path.exists(SIMULATOR_HOME) or not os.path.isdir(SIMULATOR_HOME):  # if defined, must exist.
-        startup_logger.warning(f"{SIMULATOR_NAME} not found in {SIMULATOR_HOME}")
-        SIMULATOR_HOME = None
-        if not args.demo:
-            sys.exit(1)
-    else:
-        environment[ENVIRON_KW.SIMULATOR_HOME.value] = SIMULATOR_HOME
-        startup_logger.debug(f"{SIMULATOR_NAME} found in {SIMULATOR_HOME}")
-        # while we are at it...
-        # plugin_location = os.path.join(SIMULATOR_HOME, "Resources", "plugins", "PythonPlugins", "PI_cockpitdecks.py")
-        # if os.path.exists(plugin_location):
-        #     startup_logger.debug(f"PI_cockpitdecks plugin found in {plugin_location}")
-        # else:
-        #     startup_logger.warning(f"PI_cockpitdecks plugin not found in {plugin_location}")
-
-
-#
-if not environment.is_valid():
-    if not args.demo:
-        startup_logger.error("Cockpitdecks has no environment or environment is not valid")
-        sys.exit(1)
+    startup_logger.debug(f"remote simulator at {ENVIRON_KW.SIMULATOR_HOST.value}={SIMULATOR_HOST}")
+    environment[ENVIRON_KW.SIMULATOR_HOST.value] = SIMULATOR_HOST
 
 # Extension packages
 if args.packages is not None:
@@ -372,17 +253,6 @@ COCKPITDECKS_PATH = os.getenv(ENVIRON_KW.COCKPITDECKS_PATH.value, "")
 ENV_PATH = environment.get(ENVIRON_KW.COCKPITDECKS_PATH.value)
 if ENV_PATH is not None:
     COCKPITDECKS_PATH = add_env(COCKPITDECKS_PATH, ENV_PATH)
-
-# Append X-Plane aircraft paths. Include top-level Aircraft/ so payware and third-party
-# folders (e.g. …/Aircraft/Epic E1000G) resolve, not only Laminar/Extra/Airbus subtrees.
-AIRCRAFT_FOLDERS = ["Laminar Research", "Extra Aircraft", "Airbus"]
-
-if SIMULATOR_HOME is not None and SIMULATOR_NAME == "X-Plane":
-    aircraft_root = os.path.join(SIMULATOR_HOME, "Aircraft")
-    COCKPITDECKS_PATH = add_env(
-        COCKPITDECKS_PATH,
-        [aircraft_root] + [os.path.join(aircraft_root, d) for d in AIRCRAFT_FOLDERS],
-    )
 
 environment[ENVIRON_KW.COCKPITDECKS_PATH.value] = COCKPITDECKS_PATH
 
@@ -429,9 +299,9 @@ if not args.demo:
         if args.fixed:
             startup_logger.error("non demo and fixed mode but no aircraft path")
             sys.exit(1)
-        elif SIMULATOR_HOME is None and len(COCKPITDECKS_PATH) == 0:
+        elif len(COCKPITDECKS_PATH) == 0:
             mode = CD_MODE.DEMO
-            startup_logger.debug(f"no aircraft, no {SIMULATOR_NAME} on this host, COCKPITDECKS_PATH not defined: starting in demonstration mode")
+            startup_logger.debug(f"no aircraft path and COCKPITDECKS_PATH not defined: starting in demonstration mode")
 
 startup_logger.debug(f"environment: {environment.store}")
 startup_logger.debug(f"cockpitdecks {mode}")
