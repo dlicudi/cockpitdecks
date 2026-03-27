@@ -109,8 +109,8 @@ The generated executable is named `cockpitdecks`.
 
 GitHub Actions can build and publish a macOS arm64 launcher release from this repo.
 
-- Workflow: `.github/workflows/release-launcher-macos-arm64.yml`
-- Build-only workflow: `.github/workflows/build-launcher-macos-arm64.yml`
+- Workflow: `.github/workflows/release-macos-arm64.yml`
+- Build-only workflow: `.github/workflows/build-macos-arm64.yml`
 - Dependency manifest: `.github/launcher-macos-arm64.env`
 - Trigger: push a tag matching `v*`
 - Manual trigger: `workflow_dispatch` with a required `release_tag`
@@ -137,7 +137,7 @@ Recommended release flow:
 
 This keeps the launcher release reproducible even when the dependency repos keep moving.
 
-For CI verification without creating a GitHub Release, run `.github/workflows/build-launcher-macos-arm64.yml` manually. It uses the same manifest and build steps, but only uploads the tarball, checksum, and `build-metadata.json` as Actions artifacts.
+For CI verification without creating a GitHub Release, run `.github/workflows/build-macos-arm64.yml` manually. It uses the same manifest and build steps, but only uploads the tarball, checksum, and `build-metadata.json` as Actions artifacts.
 
 ### Notes
 

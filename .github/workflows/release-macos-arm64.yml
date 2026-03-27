@@ -15,7 +15,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: launcher-macos-arm64-${{ github.event.inputs.release_tag || github.ref_name }}
+  group: cockpitdecks-macos-arm64-${{ github.event.inputs.release_tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:

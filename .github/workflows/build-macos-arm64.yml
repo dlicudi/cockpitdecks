@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: launcher-macos-arm64-build-${{ github.event.inputs.build_label }}
+  group: cockpitdecks-macos-arm64-build-${{ github.event.inputs.build_label }}
   cancel-in-progress: false
 
 jobs:
