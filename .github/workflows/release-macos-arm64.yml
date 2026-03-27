@@ -340,13 +340,34 @@ jobs:
             cockpitdecks/cockpitdecks-macos-arm64-${{ env.RELEASE_TAG }}.tar.gz.sha256
             cockpitdecks/build-metadata.json
 
+      - name: Generate release notes
+        working-directory: cockpitdecks
+        run: |
+          set -euo pipefail
+          # Find the previous tag to diff against.
+          PREV_TAG=$(git tag --sort=-version:refname | grep -v "^${RELEASE_TAG}$" | grep -v "^launcher-" | head -1) || true
+          {
+            echo "### Cockpitdecks ${RELEASE_TAG}"
+            echo ""
+            echo "macOS Apple Silicon (arm64) binary."
+            echo ""
+            if [[ -n "${PREV_TAG}" ]]; then
+              echo "#### Changes since ${PREV_TAG}"
+              echo ""
+              git log "${PREV_TAG}..${RELEASE_TAG}" --pretty=format:"- %s" --no-merges 2>/dev/null || true
+              echo ""
+              echo ""
+              echo "**Full changelog**: https://github.com/${GITHUB_REPOSITORY}/compare/${PREV_TAG}...${RELEASE_TAG}"
+            fi
+          } > release-notes.md
+
       - name: Publish GitHub release assets
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           target_commitish: ${{ github.sha }}
+          body_path: cockpitdecks/release-notes.md
           files: |
             cockpitdecks/cockpitdecks-macos-arm64-${{ env.RELEASE_TAG }}.tar.gz
             cockpitdecks/cockpitdecks-macos-arm64-${{ env.RELEASE_TAG }}.tar.gz.sha256
             cockpitdecks/build-metadata.json
-          generate_release_notes: true
