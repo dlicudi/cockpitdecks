@@ -112,7 +112,7 @@ GitHub Actions can build and publish a macOS arm64 launcher release from this re
 - Workflow: `.github/workflows/release-launcher-macos-arm64.yml`
 - Build-only workflow: `.github/workflows/build-launcher-macos-arm64.yml`
 - Dependency manifest: `.github/launcher-macos-arm64.env`
-- Trigger: push a tag matching `launcher-v*`
+- Trigger: push a tag matching `v*`
 - Manual trigger: `workflow_dispatch` with a required `release_tag`
 - Runner: `macos-14`
 - Output artifact: `cockpitdecks-macos-arm64-<tag>.tar.gz`
@@ -121,8 +121,8 @@ GitHub Actions can build and publish a macOS arm64 launcher release from this re
 Example:
 
 ```sh
-git tag launcher-v15.15.0-1
-git push origin launcher-v15.15.0-1
+git tag v15.15.2-beta.2
+git push origin v15.15.2-beta.2
 ```
 
 The workflow checks out the sibling Cockpitdecks repos into the workspace layout expected by `cockpitdecks.spec`, using the exact refs pinned in `.github/launcher-macos-arm64.env`. It then builds `dist/cockpitdecks`, verifies it is `arm64`, records the resolved commits and Python distribution versions in `build-metadata.json`, and uploads the tarball plus a SHA-256 checksum.
@@ -133,7 +133,7 @@ Recommended release flow:
 
 1. Update `.github/launcher-macos-arm64.env` to the dependency refs you want to ship.
 2. Commit that manifest change in `cockpitdecks`.
-3. Push a launcher release tag such as `launcher-v15.15.0-1`.
+3. Push a release tag such as `v15.15.2-beta.2`.
 
 This keeps the launcher release reproducible even when the dependency repos keep moving.
 

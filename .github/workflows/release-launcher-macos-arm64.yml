@@ -3,11 +3,11 @@ name: Release Cockpitdecks macOS arm64
 on:
   push:
     tags:
-      - "launcher-v*"
+      - "v*"
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "Release tag to publish (e.g. launcher-v15.15.0-1)"
+        description: "Release tag to publish (e.g. v15.15.2-beta.2)"
         required: true
         type: string
 
