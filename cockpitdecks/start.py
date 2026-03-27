@@ -214,6 +214,11 @@ def save_runtime_config(path: Path, data: dict, existing: dict | None = None) ->
 def configure_runtime_logging(data: dict) -> None:
     root_logger = logging.getLogger()
     logging.getLogger("werkzeug").setLevel(logging.WARNING)
+    # Engine mode: launched by cockpitdecks-desktop as a managed subprocess.
+    # Stream full DEBUG output to stdout so the desktop app can display it.
+    if os.environ.get("COCKPITDECKS_ENGINE"):
+        root_logger.setLevel(logging.DEBUG)
+        return
     logging_cfg = config_section(data.get("logging"), "logging")
     console_enabled = logging_cfg.get("console", True)
     if isinstance(console_enabled, str):
