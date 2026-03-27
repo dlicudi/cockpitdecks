@@ -9,7 +9,6 @@ Press CTRL-C ** once ** to gracefully stop Cockpitdecks. Be patient.
 """
 
 import sys
-import platform
 import os
 import logging
 import time
@@ -21,10 +20,7 @@ import argparse
 import subprocess
 import shutil
 import webbrowser
-try:
-    import resource
-except ImportError:  # pragma: no cover - not available on Windows
-    resource = None
+from pathlib import Path
 
 import socket
 import ipaddress
@@ -32,7 +28,7 @@ import ipaddress
 from enum import Enum
 
 from cockpitdecks import constant
-from flask import Flask, jsonify, render_template, send_from_directory, send_file, request, abort
+from flask import Flask, render_template, send_from_directory, send_file, request, abort
 from simple_websocket import Server, ConnectionClosed
 
 import ruamel
@@ -43,6 +39,7 @@ from cockpitdecks.constant import CONFIG_FOLDER, RESOURCES_FOLDER, DESIGNER_CONF
 from cockpitdecks.constant import ENVIRON_KW, CONFIG_KW, DECK_KW, DECKS_FOLDER, DECK_TYPES, TEMPLATE_FOLDER, ASSET_FOLDER, AUTOSAVE_FILE
 from cockpitdecks.cockpit import Cockpit
 from cockpitdecks.aircraft import DECK_TYPE_DESCRIPTION
+from cockpitdecks.webcontrol import install_recent_log_handler, register_web_control
 
 
 ruamel.yaml.representer.RoundTripRepresenter.ignore_aliases = lambda x, y: True
@@ -60,8 +57,25 @@ if LOGFILE is not None:
 
 startup_logger = logging.getLogger("Cockpitdecks startup")
 PROCESS_START_TS = time.time()
-_metrics_prev_wall: float | None = None
-_metrics_prev_cpu: float | None = None
+runtime_state_lock = threading.Lock()
+runtime_state = {
+    "status": "starting",
+    "message": "Starting web control server..",
+    "error": None,
+}
+_recent_log_handler = install_recent_log_handler(FORMAT)
+
+
+def set_runtime_state(status: str, message: str, error: str | None = None) -> None:
+    with runtime_state_lock:
+        runtime_state["status"] = status
+        runtime_state["message"] = message
+        runtime_state["error"] = error
+
+
+def get_runtime_state() -> dict:
+    with runtime_state_lock:
+        return dict(runtime_state)
 
 
 class CD_MODE(Enum):
@@ -108,6 +122,150 @@ def add_env(env, paths):
     return ":".join(set(env.split(":") + paths)).strip(":")
 
 
+def cockpitdecks_config_dir() -> Path:
+    home = Path.home()
+    if sys.platform == "darwin":
+        return home / "Library" / "Application Support" / "Cockpitdecks"
+    if sys.platform == "win32":
+        local_appdata = os.environ.get("LOCALAPPDATA")
+        base = Path(local_appdata) if local_appdata else home / "AppData" / "Local"
+        return base / "Cockpitdecks"
+    return home / ".config" / "cockpitdecks"
+
+
+def cockpitdecks_config_file(explicit_path: str | None = None) -> Path:
+    if explicit_path:
+        return Path(explicit_path).expanduser()
+    return cockpitdecks_config_dir() / "config.yaml"
+
+
+def load_runtime_config(explicit_path: str | None = None) -> tuple[dict, Path]:
+    path = cockpitdecks_config_file(explicit_path)
+    if explicit_path and not path.exists():
+        startup_logger.error(f"config file not found: {path}")
+        sys.exit(1)
+    if not path.exists():
+        startup_logger.debug(f"no runtime config file at {path}")
+        return {}, path
+    try:
+        with open(path, "r", encoding="utf-8") as fp:
+            data = yaml.load(fp) or {}
+        if not isinstance(data, dict):
+            startup_logger.error(f"invalid config file {path}: top-level YAML object must be a mapping")
+            sys.exit(1)
+        startup_logger.info(f"loaded runtime config from {path}")
+        return data, path
+    except Exception:
+        startup_logger.error(f"failed to load runtime config from {path}", exc_info=True)
+        sys.exit(1)
+
+
+def runtime_config_defaults() -> dict:
+    return {
+        "deck_paths": [],
+        "target": None,
+        "xplane_api": {"host": "127.0.0.1", "port": 8086},
+        "cockpitdecks_server": {"host": "127.0.0.1", "port": 7777},
+        "simulator_host": None,
+        "launch_log": None,
+        "logging": {"console": True, "log_level_filter": "DEBUG"},
+    }
+
+
+RUNTIME_CONFIG_KEYS = {
+    "deck_paths",
+    "target",
+    "xplane_api",
+    "cockpitdecks_server",
+    "simulator_host",
+    "launch_log",
+    "logging",
+}
+
+
+def merge_runtime_config(data: dict | None) -> dict:
+    merged = runtime_config_defaults()
+    if not isinstance(data, dict):
+        return merged
+    for key in ("deck_paths", "target", "simulator_host", "launch_log"):
+        if key in data:
+            merged[key] = data.get(key)
+    for key in ("xplane_api", "cockpitdecks_server", "logging"):
+        section = data.get(key)
+        if isinstance(section, dict):
+            merged[key].update(section)
+    return merged
+
+
+def save_runtime_config(path: Path, data: dict, existing: dict | None = None) -> dict:
+    merged = dict(existing) if isinstance(existing, dict) else {}
+    for key in RUNTIME_CONFIG_KEYS:
+        if key in data:
+            merged[key] = data[key]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        backup_path = path.with_suffix(path.suffix + ".bak")
+        shutil.copy2(path, backup_path)
+    with open(path, "w", encoding="utf-8") as fp:
+        yaml.dump(merged, fp)
+    return merged
+
+
+def configure_runtime_logging(data: dict) -> None:
+    root_logger = logging.getLogger()
+    logging.getLogger("werkzeug").setLevel(logging.WARNING)
+    logging_cfg = config_section(data.get("logging"), "logging")
+    console_enabled = logging_cfg.get("console", True)
+    if isinstance(console_enabled, str):
+        console_enabled = console_enabled.strip().lower() not in {"0", "false", "no", "off"}
+    if console_enabled:
+        return
+    for handler in list(root_logger.handlers):
+        if handler is _recent_log_handler:
+            continue
+        if isinstance(handler, logging.StreamHandler):
+            root_logger.removeHandler(handler)
+
+
+def suppress_console_logging() -> None:
+    root_logger = logging.getLogger()
+    for handler in list(root_logger.handlers):
+        if handler is _recent_log_handler:
+            continue
+        if isinstance(handler, logging.StreamHandler):
+            root_logger.removeHandler(handler)
+
+
+def config_path_list(value) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [part.strip() for part in value.split(":") if part.strip()]
+    if isinstance(value, (list, tuple, set)):
+        return [str(part).strip() for part in value if str(part).strip()]
+    startup_logger.warning(f"invalid deck_paths={value!r}, expected list or colon-separated string")
+    return []
+
+
+def config_section(value, name: str) -> dict:
+    if value is None:
+        return {}
+    if isinstance(value, dict):
+        return value
+    startup_logger.warning(f"invalid {name}={value!r}, expected mapping")
+    return {}
+
+
+def config_port(value, default: int, name: str) -> int:
+    if value is None or value == "":
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        startup_logger.warning(f"invalid {name}={value!r}, using default {default}")
+        return default
+
+
 # ######################################################################################################
 # COCKPITDECKS STARTS HERE
 #
@@ -136,8 +294,14 @@ parser.add_argument(
     "--template", metavar="aircraft folder", type=str, nargs=1, help="create deckconfig and add template files to start in supplied aircraft folder"
 )
 parser.add_argument("--designer", action="store_true", help="start designer")
+parser.add_argument("--config", metavar="config.yaml", type=str, help="load runtime config from supplied file")
 # parser.add_argument("--install-plugin", action="store_true", help="install Cockpitdecks plugin in X-Plane/XPPython3")
 parser.add_argument("aircraft_folder", metavar="aircraft_folder", type=str, nargs="?", help="aircraft folder for non automatic start")
+
+early_args, _ = parser.parse_known_args()
+_early_runtime_config, _ = load_runtime_config(early_args.config)
+_early_runtime_config = merge_runtime_config(_early_runtime_config)
+configure_runtime_logging(_early_runtime_config)
 
 args = parser.parse_args()
 
@@ -201,6 +365,10 @@ if args.template:
 # Loads environment to know which flight simulator and where to locate it.
 #
 environment = Config(filename=None)  # create default env to host values
+runtime_config_raw, _runtime_config_path = load_runtime_config(args.config)
+runtime_config = merge_runtime_config(runtime_config_raw)
+RUNTIME_CONFIG_PATH = _runtime_config_path
+configure_runtime_logging(runtime_config)
 
 # Debug
 #
@@ -231,7 +399,11 @@ SIMULATOR_NAME = "NoSimulator" if args.demo else "X-Plane"
 environment[ENVIRON_KW.SIMULATOR_NAME.value] = SIMULATOR_NAME
 startup_logger.debug(f"Simulator is {SIMULATOR_NAME}")
 
-SIMULATOR_HOST = os.getenv(ENVIRON_KW.SIMULATOR_HOST.value) or environment.get(ENVIRON_KW.SIMULATOR_HOST.value)
+SIMULATOR_HOST = runtime_config.get("simulator_host")
+if SIMULATOR_HOST in ("", "null"):
+    SIMULATOR_HOST = None
+if SIMULATOR_HOST is None:
+    SIMULATOR_HOST = os.getenv(ENVIRON_KW.SIMULATOR_HOST.value) or environment.get(ENVIRON_KW.SIMULATOR_HOST.value)
 if SIMULATOR_HOST is not None:
     startup_logger.debug(f"remote simulator at {ENVIRON_KW.SIMULATOR_HOST.value}={SIMULATOR_HOST}")
     environment[ENVIRON_KW.SIMULATOR_HOST.value] = SIMULATOR_HOST
@@ -246,8 +418,10 @@ if args.packages is not None:
 
 # COCKPITDECKS_PATH
 #
-# Strats from environment
-COCKPITDECKS_PATH = os.getenv(ENVIRON_KW.COCKPITDECKS_PATH.value, "")
+runtime_deck_paths = config_path_list(runtime_config.get("deck_paths"))
+COCKPITDECKS_PATH = ":".join(runtime_deck_paths)
+if COCKPITDECKS_PATH == "":
+    COCKPITDECKS_PATH = os.getenv(ENVIRON_KW.COCKPITDECKS_PATH.value, "")
 
 # Append from environment file
 ENV_PATH = environment.get(ENVIRON_KW.COCKPITDECKS_PATH.value)
@@ -258,24 +432,48 @@ environment[ENVIRON_KW.COCKPITDECKS_PATH.value] = COCKPITDECKS_PATH
 
 startup_logger.debug(f"{ENVIRON_KW.COCKPITDECKS_PATH.value}={COCKPITDECKS_PATH}")
 
+# X-Plane Web API connection
+#
+xplane_api = config_section(runtime_config.get("xplane_api"), "xplane_api")
+api_host = xplane_api.get("host")
+if not api_host:
+    api_host = os.getenv(ENVIRON_KW.API_HOST.value) or environment.get(ENVIRON_KW.API_HOST.value) or "127.0.0.1"
+api_port = config_port(xplane_api.get("port"), default=8086, name="xplane_api.port")
+if "port" not in xplane_api:
+    api_port = config_port(os.getenv(ENVIRON_KW.API_PORT.value) or environment.get(ENVIRON_KW.API_PORT.value), default=8086, name=ENVIRON_KW.API_PORT.value)
+environment[ENVIRON_KW.API_HOST.value] = str(api_host)
+environment[ENVIRON_KW.API_PORT.value] = int(api_port)
+startup_logger.debug(f"X-Plane API at {api_host}:{api_port}")
+
 # Application environment variables
 #
-app_host_env = os.getenv(ENVIRON_KW.APP_HOST.value)  # !! should only return a hostname
-app_bind_host = "127.0.0.1"
-app_bind_port = 7777
-if app_host_env is not None:
-    app_bind_host = app_host_env
-    app_bind_port = int(os.getenv(ENVIRON_KW.APP_PORT.value, 7777))
-else:
-    configured_app_host = environment.get(ENVIRON_KW.APP_HOST.value, ["127.0.0.1", 7777])
-    if isinstance(configured_app_host, (list, tuple)) and len(configured_app_host) >= 2:
-        app_bind_host = str(configured_app_host[0])
-        app_bind_port = int(configured_app_host[1])
+cockpitdecks_server = config_section(runtime_config.get("cockpitdecks_server"), "cockpitdecks_server")
+app_bind_host = str(cockpitdecks_server.get("host") or "").strip()
+if app_bind_host == "":
+    app_host_env = os.getenv(ENVIRON_KW.APP_HOST.value)  # !! should only return a hostname
+    if app_host_env is not None:
+        app_bind_host = app_host_env
     else:
-        startup_logger.warning(f"invalid {ENVIRON_KW.APP_HOST.value}={configured_app_host}, using default 127.0.0.1:7777")
+        configured_app_host = environment.get(ENVIRON_KW.APP_HOST.value, ["127.0.0.1", 7777])
+        if isinstance(configured_app_host, (list, tuple)) and len(configured_app_host) >= 2:
+            app_bind_host = str(configured_app_host[0])
+        else:
+            startup_logger.warning(f"invalid {ENVIRON_KW.APP_HOST.value}={configured_app_host}, using default 127.0.0.1:7777")
+            app_bind_host = "127.0.0.1"
+
+app_bind_port = config_port(cockpitdecks_server.get("port"), default=7777, name="cockpitdecks_server.port")
+if "port" not in cockpitdecks_server:
+    app_port_env = os.getenv(ENVIRON_KW.APP_PORT.value)
+    if app_port_env is not None:
+        app_bind_port = config_port(app_port_env, default=7777, name=ENVIRON_KW.APP_PORT.value)
+    else:
+        configured_app_host = environment.get(ENVIRON_KW.APP_HOST.value, ["127.0.0.1", 7777])
+        if isinstance(configured_app_host, (list, tuple)) and len(configured_app_host) >= 2:
+            app_bind_port = config_port(configured_app_host[1], default=7777, name=ENVIRON_KW.APP_PORT.value)
 
 APP_HOST = [app_bind_host, app_bind_port]
 environment[ENVIRON_KW.APP_HOST.value] = APP_HOST
+environment[ENVIRON_KW.APP_PORT.value] = app_bind_port
 
 startup_logger.debug(f"Cockpitdecks application server at {APP_HOST}")
 
@@ -285,11 +483,11 @@ startup_logger.debug(f"Cockpitdecks application server at {APP_HOST}")
 mode = CD_MODE.DEMO if args.demo else CD_MODE.NORMAL
 environment[ENVIRON_KW.MODE.value] = mode
 
-ac = args.aircraft_folder
+ac = args.aircraft_folder or runtime_config.get("target")
 
 if not args.demo:
     if ac is not None:
-        target_dir = os.path.abspath(os.path.join(os.getcwd(), ac))
+        target_dir = os.path.abspath(os.path.expanduser(os.path.join(os.getcwd(), ac)))
         if not os.path.exists(target_dir) or not os.path.isdir(target_dir):
             startup_logger.error(f"{target_dir} directory not found")
             sys.exit(1)
@@ -297,7 +495,7 @@ if not args.demo:
         if not os.path.exists(test_dir) or not os.path.isdir(test_dir):
             startup_logger.error(f"{target_dir} directory does not contain {CONFIG_FOLDER} directory")
             sys.exit(1)
-        AIRCRAFT_HOME = os.path.abspath(os.path.join(os.getcwd(), ac))
+        AIRCRAFT_HOME = target_dir
         AIRCRAFT_DESC = os.path.basename(ac)
         mode = CD_MODE.FIXED if args.fixed else CD_MODE.NORMAL
         startup_logger.debug(f"starting aircraft folder {AIRCRAFT_HOME}, {'fixed' if mode.value > 0 else 'dynamically adjusted to aircraft'}")
@@ -317,9 +515,7 @@ startup_logger.debug(f"..Cockpitdecks configured startup. Let's {'try' if args.f
 #
 copyrights = f"{__NAME__.title()} {__version__}{last_commit} {__COPYRIGHT__}\n{DESC}\n"
 print(copyrights)
-logger.info("Initializing Cockpitdecks..")
-cockpit = Cockpit(environ=environment)
-logger.info("..initialized\n")
+cockpit = None
 
 
 # ######################################################################################################
@@ -338,10 +534,16 @@ WEBDECK_WSURL = "ws_url"
 # Flask Web Server (& WebSocket Server)
 #
 app = Flask(__NAME__, template_folder=TEMPLATE_FOLDER)
+def persist_runtime_config(updated: dict) -> dict:
+    global runtime_config, runtime_config_raw
+    runtime_config = updated
+    runtime_config_raw = save_runtime_config(RUNTIME_CONFIG_PATH, runtime_config, runtime_config_raw)
+    return runtime_config
 
 
 def get_aircraft_home():
-    acpath = getattr(cockpit.aircraft, "acpath", None)
+    aircraft = getattr(cockpit, "aircraft", None) if cockpit is not None else None
+    acpath = getattr(aircraft, "acpath", None)
     return acpath if acpath is not None else AIRCRAFT_HOME
 
 
@@ -352,13 +554,56 @@ def get_aircraft_asset_folder():
 def get_aircraft_deck_types_folder():
     return os.path.join(get_aircraft_asset_folder(), DECKS_FOLDER, DECK_TYPES)
 
-# app.logger.setLevel(logging.DEBUG)
-# app.config["EXPLAIN_TEMPLATE_LOADING"] = True
+
+register_web_control(
+    app,
+    recent_log_handler=_recent_log_handler,
+    get_cockpit=lambda: cockpit,
+    get_runtime_state=get_runtime_state,
+    get_runtime_config=lambda: runtime_config,
+    persist_runtime_config=persist_runtime_config,
+    runtime_config_path=RUNTIME_CONFIG_PATH,
+    environment=environment,
+    environ_kw=ENVIRON_KW,
+    config_path_list=config_path_list,
+    merge_runtime_config=merge_runtime_config,
+    process_start_ts=PROCESS_START_TS,
+)
+
+
+def start_cockpit_runtime() -> None:
+    global cockpit
+    try:
+        set_runtime_state("starting", "Initializing Cockpitdecks..")
+        logger.info("Initializing Cockpitdecks..")
+        cockpit = Cockpit(environ=environment)
+        logger.info("..initialized\n")
+
+        start_acpath = AIRCRAFT_HOME
+        start_desc = AIRCRAFT_DESC
+        if ac is None and mode == CD_MODE.NORMAL:
+            start_acpath = None
+            start_desc = __NAME__.title()
+
+        set_runtime_state("starting", f"Starting {start_desc}..")
+        logger.info(f"Starting {start_desc}..")
+        if start_acpath is None:
+            logger.info(
+                f"(starting without a preloaded aircraft; will load aircraft if {SIMULATOR_NAME} is running and aircraft with Cockpitdecks {CONFIG_FOLDER} loaded)"
+            )
+        release_to_startup = args.designer or mode == CD_MODE.NORMAL
+        cockpit.start_aircraft(acpath=start_acpath, release=release_to_startup, mode=mode.value)
+        logger.info(f"..{start_desc} running..")
+        set_runtime_state("running", f"{start_desc} running")
+    except Exception as exc:
+        logger.exception("Cockpitdecks startup failed")
+        set_runtime_state("failed", "Startup failed", error=str(exc))
 
 
 @app.route("/")
 def index():
-    return render_template("index.j2", virtual_decks=cockpit.virtual_decks, copyrights={"copyrights": copyrights.replace("\n", "<br/>")})
+    virtual_decks = cockpit.virtual_decks if cockpit is not None else {}
+    return render_template("index.j2", virtual_decks=virtual_decks, copyrights={"copyrights": copyrights.replace("\n", "<br/>")})
 
 
 @app.route("/favicon.ico")
@@ -442,119 +687,6 @@ def capabilities():
     return l
 
 
-@app.route("/desktop-status", methods=["GET"])
-def desktop_status():
-    """Small JSON snapshot for external tools (e.g. Cockpitdecks Desktop). Avoids heavy /capabilities."""
-    ac = cockpit.aircraft
-    deckconfig_path = None
-    if ac.acpath is not None:
-        deckconfig_path = os.path.abspath(os.path.join(ac.acpath, CONFIG_FOLDER))
-    deck_names = sorted(ac.decks.keys()) if ac.decks else []
-    return jsonify(
-        {
-            "cockpitdecks_version": __version__,
-            "aircraft_name": ac.name or "",
-            "aircraft_path": ac.acpath,
-            "deckconfig_path": deckconfig_path,
-            "deck_names": deck_names,
-        }
-    )
-
-
-def _sample_process_cpu_percent() -> float | None:
-    """Approximate process CPU % since previous sample (single process, all cores)."""
-    global _metrics_prev_wall, _metrics_prev_cpu
-    now_wall = time.perf_counter()
-    now_cpu = time.process_time()
-    if _metrics_prev_wall is None or _metrics_prev_cpu is None:
-        _metrics_prev_wall = now_wall
-        _metrics_prev_cpu = now_cpu
-        return None
-    dw = now_wall - _metrics_prev_wall
-    dc = now_cpu - _metrics_prev_cpu
-    _metrics_prev_wall = now_wall
-    _metrics_prev_cpu = now_cpu
-    if dw <= 0:
-        return None
-    return max(0.0, (dc / dw) * 100.0)
-
-
-def _safe_len(value) -> int:
-    try:
-        return len(value) if value is not None else 0
-    except TypeError:
-        return 0
-
-
-def _dataref_traffic_stats(sim) -> dict:
-    """Extract WebSocket traffic counters from the simulator's xpwebapi _stats dict."""
-    if sim is None:
-        return {}
-    stats = getattr(sim, "_stats", None)
-    if not isinstance(stats, dict):
-        return {}
-    return {
-        "ws_messages_received": stats.get("receive", 0),
-        "dataref_updates_received": stats.get("response_update", 0),
-        "dataref_values_processed": stats.get("update_dataref", 0),
-        "batch_events": stats.get("batch_events", 0),
-    }
-
-
-@app.route("/desktop-metrics", methods=["GET"])
-def desktop_metrics():
-    """Small runtime/perf snapshot for Cockpitdecks Desktop."""
-    rss_mb: float | None = None
-    try:
-        if resource is not None:
-            rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-            # macOS reports bytes, Linux reports kilobytes.
-            rss_mb = (rss / (1024 * 1024)) if platform.system() == "Darwin" else (rss / 1024.0)
-    except OSError:
-        rss_mb = None
-
-    sim = getattr(cockpit, "sim", None)
-    vdb = getattr(cockpit, "variable_database", None)
-    ac = getattr(cockpit, "aircraft", None)
-    deck_count = _safe_len(getattr(ac, "decks", None))
-    pages_count = 0
-    if ac is not None and getattr(ac, "decks", None):
-        for d in ac.decks.values():
-            pages_count += _safe_len(getattr(d, "pages", None))
-
-    return jsonify(
-        {
-            "timestamp": int(time.time()),
-            "uptime_s": round(max(0.0, time.time() - PROCESS_START_TS), 3),
-            "process": {
-                "pid": os.getpid(),
-                "thread_count": threading.active_count(),
-                "cpu_percent": _sample_process_cpu_percent(),
-                "max_rss_mb": round(rss_mb, 2) if rss_mb is not None else None,
-            },
-            "cockpit": {
-                "mode": str(getattr(getattr(cockpit, "mode", None), "name", "")),
-                "decks_count": deck_count,
-                "pages_count": pages_count,
-                "registered_variables": _safe_len(getattr(vdb, "database", None)),
-                "dirty_marks": getattr(cockpit, "_dirty_marks", 0),
-                "dirty_flushes": getattr(cockpit, "_dirty_flushes", 0),
-                "dirty_rendered": getattr(cockpit, "_dirty_rendered", 0),
-                "event_queue_depth": cockpit.event_queue.qsize() + cockpit.priority_event_queue.qsize(),
-            },
-            "simulator": {
-                "name": type(sim).__name__ if sim is not None else "",
-                "running": bool(getattr(sim, "running", False)),
-                "status": str(getattr(sim, "xplane_status_str", "")),
-                "datarefs_monitored": _safe_len(getattr(sim, "simulator_variable_to_monitor", None)),
-                "events_monitored": _safe_len(getattr(sim, "simulator_event_to_monitor", None)),
-            },
-            "dataref_traffic": _dataref_traffic_stats(sim),
-            "diagnostics": cockpit.get_diagnostics() if hasattr(cockpit, "get_diagnostics") else {},
-        }
-    )
-
-
 @app.route("/preview", methods=("GET", "POST"))  # alias to button-designer
 def preview():
     if request.method == "POST":
@@ -623,12 +755,6 @@ def button_designer_io():
     else:
         return {"status": "no name"}
     return code
-
-
-@app.route("/reload-decks")
-def reload():
-    cockpit.reload_decks()
-    return {"status": "ok"}
 
 
 # Deck runner
@@ -735,43 +861,24 @@ def cockpit_wshandler():
 #
 def main():
     try:
-        appsrvstarted = False
-        start_acpath = AIRCRAFT_HOME
-        start_desc = AIRCRAFT_DESC
-        if ac is None and mode == CD_MODE.NORMAL:
-            start_acpath = None
-            start_desc = __NAME__.title()
-
-        logger.info(f"Starting {start_desc}..")
-        if start_acpath is None:
-            logger.info(
-                f"(starting without a preloaded aircraft; will load aircraft if {SIMULATOR_NAME} is running and aircraft with Cockpitdecks {CONFIG_FOLDER} loaded)"
-            )
-        release_to_startup = args.designer or mode == CD_MODE.NORMAL
-        cockpit.start_aircraft(acpath=start_acpath, release=release_to_startup, mode=mode.value)
-        logger.info(f"..{start_desc} running..")
-        designer_images_available = args.designer and cockpit.aircraft.acpath is not None and len(cockpit.get_deck_background_images()) > 0
-        normal_mode_server = mode == CD_MODE.NORMAL
-        if cockpit.has_web_decks() or designer_images_available or normal_mode_server:
-            if not cockpit.has_web_decks() and not normal_mode_server:
-                logger.warning("no web deck, starting application server for designer")
-            logger.info("starting application server..")
-            appsrvstarted = True
-            if args.web:
-                url = f"http://{APP_HOST[0]}:{APP_HOST[1]}"
-                logger.info(f"..opening browser window ({url})..")
-                webbrowser.open(url)
-            app.run(host="0.0.0.0", port=APP_HOST[1])
-        else:
-            logger.warning("no web deck, no request for designer")
+        suppress_console_logging()
+        print(f"Cockpitdecks control available at http://{APP_HOST[0]}:{APP_HOST[1]}/control")
+        logger.info("starting application server..")
+        startup_thread = threading.Thread(target=start_cockpit_runtime, name="CockpitStartup", daemon=True)
+        startup_thread.start()
+        if args.web:
+            url = f"http://{APP_HOST[0]}:{APP_HOST[1]}"
+            logger.info(f"..opening browser window ({url})..")
+            webbrowser.open(url)
+        app.run(host="0.0.0.0", port=APP_HOST[1])
 
         # If single CTRL-C pressed, will terminate from here
         # logger.info("terminating (please wait)..")
         print("")  # to highlight CTRL-C in log window
-        if appsrvstarted:
-            logger.info("..application server terminated")
-        cockpit.terminate_all(threads=1)  # [MainThread]
-        logger.info(f"..{cockpit.get_aircraft_name()} terminated")
+        logger.info("..application server terminated")
+        if cockpit is not None:
+            cockpit.terminate_all(threads=1)  # [MainThread]
+            logger.info(f"..{cockpit.get_aircraft_name()} terminated")
         # os._exit(0)
 
     except KeyboardInterrupt:

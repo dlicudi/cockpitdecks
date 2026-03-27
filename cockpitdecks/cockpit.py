@@ -768,7 +768,7 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
                     if package in COCKPITDECKS_INTERNAL_EXTENSIONS:
                         extra = ""
                         if getattr(sys, "frozen", False):
-                            extra = " — frozen app: add this package to cockpitdecks-launcher.spec (collect_all) and rebuild"
+                            extra = " — frozen app: add this package to cockpitdecks.spec (collect_all) and rebuild"
                         logger.warning(
                             f"package {package} not found, ignored (internal extension missing from bundle or PYTHONPATH){extra}"
                         )
@@ -1837,7 +1837,8 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
             return
         logger.debug(f"{data.name}({type(data)})={data.value}")
         if name == AIRCRAFT_CHANGE_MONITORING:
-            self.change_aircraft(newpath=data.value)
+            logger.info("automatic aircraft change ignored")
+            return
         elif name == LIVERY_CHANGE_MONITORING:
             self.change_livery(newpath=data.value)
         elif name == AIRCRAFT_ICAO_MONITORING:
@@ -1905,44 +1906,6 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
                 logger.info("..reloaded")
             else:
                 logger.info("not reloading on livery change")
-
-    def change_aircraft(self, newpath: str):
-        # We arrive here when sim/aircraft/view/acf_relative_path changed
-        value = newpath
-        if value is None or type(value) is not str:
-            logger.warning(f"aircraft path invalid value {value}, ignoring")
-            return
-
-        # Path is like Aircraft/Extra Aircraft/ToLiss A321/liveries/F Airways (OO-PMA)/A330-900_StdDef.acf
-        acname = Aircraft.get_aircraft_name_from_aircraft_path(os.path.dirname(value))
-        logger.info("✈ " * 6 + f"new aircraft path {value}, aircraft name {acname}")
-
-        if self.mode > 0:
-            logger.info("Cockpitdecks aircraft --fixed or demo mode, aircraft not changed")
-            return
-
-        if acname == self.aircraft.name:
-            logger.info(f"aircraft unchanged ({self.aircraft.name}, {self.aircraft.acpath})")
-            return
-
-        # We need to find the acpath
-        acpath = self.get_aircraft_path(acname)
-
-        if acpath is None:
-            logger.warning(f"aircraft changed to {acname}, cannot find aircraft path")
-            # Still refresh simulator metadata: X-Plane renumbers dataref ids per aircraft load.
-            if self.sim is not None:
-                self.sim.aircraft_changed()
-            return
-
-        # We try to see if we have a new livery as well
-        liveryvalue = self.get_variable_value(name=Variable.internal_variable_name(LIVERY_CHANGE_MONITORING))
-        if liveryvalue is None:
-            logger.debug(f"{LIVERY_CHANGE_MONITORING} unavailable, skipping livery change")
-        elif not isinstance(liveryvalue, str):
-            logger.warning(f"{LIVERY_CHANGE_MONITORING} has invalid value {liveryvalue}, ignoring livery change")
-            liveryvalue = None
-        self.schedule_aircraft_change(acname=acname, acpath=acpath, liverypath=liveryvalue if isinstance(liveryvalue, str) else None)
 
     def schedule_aircraft_change(self, acname: str, acpath: str, liverypath: str | None = None):
         with self._aircraft_change_lock:

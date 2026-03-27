@@ -53,8 +53,8 @@ run:
 		echo "[run] cockpitdecks-desktop python not found at ../cockpitdecks-desktop/.venv/bin/python"; \
 		exit 1; \
 	fi
-	@if [ ! -x "dist/cockpitdecks-launcher" ]; then \
-		echo "[run] launcher not found at dist/cockpitdecks-launcher"; \
+	@if [ ! -x "dist/cockpitdecks" ]; then \
+		echo "[run] executable not found at dist/cockpitdecks"; \
 		echo "[run] building launcher first"; \
 		./scripts/build_launcher.sh; \
 	fi

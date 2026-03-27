@@ -7,7 +7,7 @@ cd "$ROOT_DIR"
 echo "[build] cleaning cockpitdecks build artifacts"
 python3 -c "import shutil, os; [shutil.rmtree(d) for d in ('build','dist') if os.path.exists(d)]"
 
-echo "[build] building cockpitdecks launcher"
-.venv/bin/pyinstaller --clean cockpitdecks-launcher.spec
+echo "[build] building cockpitdecks"
+.venv/bin/pyinstaller --clean cockpitdecks.spec
 
-echo "Build complete: $ROOT_DIR/dist/cockpitdecks-launcher"
+echo "Build complete: $ROOT_DIR/dist/cockpitdecks"

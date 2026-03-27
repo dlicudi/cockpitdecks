@@ -83,7 +83,7 @@ Fly safely.
 
 `launcher.py` is a thin entrypoint that runs `cockpitdecks.start` as `__main__`. It exists so the app can be launched directly or bundled cleanly for distribution.
 
-The PyInstaller build definition is [cockpitdecks-launcher.spec](/Users/duanelicudi/GitHub/cockpitdecks/cockpitdecks-launcher.spec). It collects the core package plus the optional backends used by Cockpitdecks:
+The PyInstaller build definition is [cockpitdecks.spec](/Users/duanelicudi/GitHub/cockpitdecks/cockpitdecks.spec). It collects the core package plus the optional backends used by Cockpitdecks:
 
 - `cockpitdecks`
 - `cockpitdecks_xp`
@@ -100,10 +100,10 @@ The PyInstaller build definition is [cockpitdecks-launcher.spec](/Users/duanelic
 
 ```sh
 python -m pip install pyinstaller
-pyinstaller cockpitdecks-launcher.spec
+pyinstaller cockpitdecks.spec
 ```
 
-The generated executable is named `cockpitdecks-launcher`.
+The generated executable is named `cockpitdecks`.
 
 ### Automated macOS Apple Silicon release
 
@@ -115,7 +115,7 @@ GitHub Actions can build and publish a macOS arm64 launcher release from this re
 - Trigger: push a tag matching `launcher-v*`
 - Manual trigger: `workflow_dispatch` with a required `release_tag`
 - Runner: `macos-14`
-- Output artifact: `cockpitdecks-launcher-macos-arm64-<tag>.tar.gz`
+- Output artifact: `cockpitdecks-macos-arm64-<tag>.tar.gz`
 - Release metadata: `build-metadata.json`
 
 Example:
@@ -125,7 +125,7 @@ git tag launcher-v15.15.0-1
 git push origin launcher-v15.15.0-1
 ```
 
-The workflow checks out the sibling Cockpitdecks repos into the workspace layout expected by `cockpitdecks-launcher.spec`, using the exact refs pinned in `.github/launcher-macos-arm64.env`. It then builds `dist/cockpitdecks-launcher`, verifies it is `arm64`, records the resolved commits and Python distribution versions in `build-metadata.json`, and uploads the tarball plus a SHA-256 checksum.
+The workflow checks out the sibling Cockpitdecks repos into the workspace layout expected by `cockpitdecks.spec`, using the exact refs pinned in `.github/launcher-macos-arm64.env`. It then builds `dist/cockpitdecks`, verifies it is `arm64`, records the resolved commits and Python distribution versions in `build-metadata.json`, and uploads the tarball plus a SHA-256 checksum.
 
 When recreating the build environment, the workflow installs the local repos with `--no-build-isolation` and removes any pre-existing wheel install of `loupedeck` first. This avoids accidentally freezing a PyPI copy instead of the checked-out `python-loupedeck-live` repository.
 
@@ -163,6 +163,47 @@ make run
 This uses:
 
 - `../cockpitdecks-desktop/.venv/bin/python -m cockpitdecks_desktop.app`
-- `./dist/cockpitdecks-launcher`
+- `./dist/cockpitdecks`
 
-The target builds `dist/cockpitdecks-launcher` first if needed. In dev mode, the desktop app resolves that launcher path itself.
+The target builds `dist/cockpitdecks` first if needed. In dev mode, the desktop app resolves that executable path itself.
+
+## Runtime Config
+
+The `cockpitdecks` binary can load a per-user runtime config file. By default it looks for:
+
+- macOS: `~/Library/Application Support/Cockpitdecks/config.yaml`
+- Linux: `~/.config/cockpitdecks/config.yaml`
+- Windows: `%LOCALAPPDATA%/Cockpitdecks/config.yaml`
+
+Override that path with `--config /path/to/config.yaml`.
+
+Example:
+
+```yaml
+deck_paths:
+  - /Users/duanelicudi/Library/Application Support/Cockpitdecks/decks
+  - /Users/duanelicudi/GitHub/cockpitdecks-configs/decks
+
+target: null
+
+xplane_api:
+  host: 127.0.0.1
+  port: 8086
+
+cockpitdecks_server:
+  host: 127.0.0.1
+  port: 7777
+
+simulator_host: null
+launch_log: null
+
+logging:
+  console: true
+```
+
+Current precedence is:
+
+1. CLI arguments
+2. `config.yaml`
+3. environment variables
+4. built-in defaults

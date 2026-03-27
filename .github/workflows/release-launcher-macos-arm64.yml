@@ -1,4 +1,4 @@
-name: Release Launcher macOS arm64
+name: Release Cockpitdecks macOS arm64
 
 on:
   push:
@@ -197,7 +197,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('cockpitdecks/pyproject.toml', 'cockpitdecks/cockpitdecks-launcher.spec', 'cockpitdecks/pyinstaller_runtime_hook.py', 'cockpitdecks/.github/launcher-macos-arm64.env', 'cockpitdecks_xp/pyproject.toml', 'cockpitdecks_ld/pyproject.toml', 'cockpitdecks_sd/pyproject.toml', 'cockpitdecks_wm/pyproject.toml', 'cockpitdecks_ext/pyproject.toml', 'cockpitdecks_bx/pyproject.toml', 'xplane-webapi/pyproject.toml', 'python-loupedeck-live/pyproject.toml', 'python-elgato-streamdeck/setup.py', 'python-elgato-streamdeck/src/StreamDeck/Transport/LibUSBHIDAPI.py') }}
+          key: ${{ runner.os }}-pip-${{ hashFiles('cockpitdecks/pyproject.toml', 'cockpitdecks/cockpitdecks.spec', 'cockpitdecks/pyinstaller_runtime_hook.py', 'cockpitdecks/.github/launcher-macos-arm64.env', 'cockpitdecks_xp/pyproject.toml', 'cockpitdecks_ld/pyproject.toml', 'cockpitdecks_sd/pyproject.toml', 'cockpitdecks_wm/pyproject.toml', 'cockpitdecks_ext/pyproject.toml', 'cockpitdecks_bx/pyproject.toml', 'xplane-webapi/pyproject.toml', 'python-loupedeck-live/pyproject.toml', 'python-elgato-streamdeck/setup.py', 'python-elgato-streamdeck/src/StreamDeck/Transport/LibUSBHIDAPI.py') }}
           restore-keys: |
             ${{ runner.os }}-pip-
 
@@ -315,18 +315,18 @@ jobs:
       - name: Verify launcher binary
         working-directory: cockpitdecks
         run: |
-          test -x dist/cockpitdecks-launcher
-          file dist/cockpitdecks-launcher
-          lipo -archs dist/cockpitdecks-launcher | grep -q "arm64"
-          dist/cockpitdecks-launcher --version
+          test -x dist/cockpitdecks
+          file dist/cockpitdecks
+          lipo -archs dist/cockpitdecks | grep -q "arm64"
+          dist/cockpitdecks --version
 
       - name: Package release artifact
         working-directory: cockpitdecks
         run: |
-          ARTIFACT_BASENAME="cockpitdecks-launcher-macos-arm64-${RELEASE_TAG}"
+          ARTIFACT_BASENAME="cockpitdecks-macos-arm64-${RELEASE_TAG}"
           rm -rf "${ARTIFACT_BASENAME}"
           mkdir -p "${ARTIFACT_BASENAME}"
-          cp dist/cockpitdecks-launcher "${ARTIFACT_BASENAME}/"
+          cp dist/cockpitdecks "${ARTIFACT_BASENAME}/"
           cp build-metadata.json "${ARTIFACT_BASENAME}/"
           tar -czf "${ARTIFACT_BASENAME}.tar.gz" "${ARTIFACT_BASENAME}"
           shasum -a 256 "${ARTIFACT_BASENAME}.tar.gz" > "${ARTIFACT_BASENAME}.tar.gz.sha256"
@@ -334,10 +334,10 @@ jobs:
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: cockpitdecks-launcher-macos-arm64-${{ env.RELEASE_TAG }}
+          name: cockpitdecks-macos-arm64-${{ env.RELEASE_TAG }}
           path: |
-            cockpitdecks/cockpitdecks-launcher-macos-arm64-${{ env.RELEASE_TAG }}.tar.gz
-            cockpitdecks/cockpitdecks-launcher-macos-arm64-${{ env.RELEASE_TAG }}.tar.gz.sha256
+            cockpitdecks/cockpitdecks-macos-arm64-${{ env.RELEASE_TAG }}.tar.gz
+            cockpitdecks/cockpitdecks-macos-arm64-${{ env.RELEASE_TAG }}.tar.gz.sha256
             cockpitdecks/build-metadata.json
 
       - name: Publish GitHub release assets
@@ -346,7 +346,7 @@ jobs:
           tag_name: ${{ env.RELEASE_TAG }}
           target_commitish: ${{ github.sha }}
           files: |
-            cockpitdecks/cockpitdecks-launcher-macos-arm64-${{ env.RELEASE_TAG }}.tar.gz
-            cockpitdecks/cockpitdecks-launcher-macos-arm64-${{ env.RELEASE_TAG }}.tar.gz.sha256
+            cockpitdecks/cockpitdecks-macos-arm64-${{ env.RELEASE_TAG }}.tar.gz
+            cockpitdecks/cockpitdecks-macos-arm64-${{ env.RELEASE_TAG }}.tar.gz.sha256
             cockpitdecks/build-metadata.json
           generate_release_notes: true
