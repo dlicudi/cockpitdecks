@@ -260,16 +260,22 @@ startup_logger.debug(f"{ENVIRON_KW.COCKPITDECKS_PATH.value}={COCKPITDECKS_PATH}"
 
 # Application environment variables
 #
-APP_HOST = os.getenv(ENVIRON_KW.APP_HOST.value)  # !! should only return a hostname
-APP_PORT = 7777
-if APP_HOST is not None:
-    APP_PORT = os.getenv(ENVIRON_KW.APP_PORT.value, 7777)
-    APP_HOST = [APP_HOST, APP_PORT]
-else:  # from now on, APP_HOST = [hostname, port]
-    APP_HOST = environment.get(ENVIRON_KW.APP_HOST.value, ["127.0.0.1", 7777])
+app_host_env = os.getenv(ENVIRON_KW.APP_HOST.value)  # !! should only return a hostname
+app_bind_host = "127.0.0.1"
+app_bind_port = 7777
+if app_host_env is not None:
+    app_bind_host = app_host_env
+    app_bind_port = int(os.getenv(ENVIRON_KW.APP_PORT.value, 7777))
+else:
+    configured_app_host = environment.get(ENVIRON_KW.APP_HOST.value, ["127.0.0.1", 7777])
+    if isinstance(configured_app_host, (list, tuple)) and len(configured_app_host) >= 2:
+        app_bind_host = str(configured_app_host[0])
+        app_bind_port = int(configured_app_host[1])
+    else:
+        startup_logger.warning(f"invalid {ENVIRON_KW.APP_HOST.value}={configured_app_host}, using default 127.0.0.1:7777")
 
-if APP_HOST is not None:
-    environment[ENVIRON_KW.APP_HOST.value] = APP_HOST
+APP_HOST = [app_bind_host, app_bind_port]
+environment[ENVIRON_KW.APP_HOST.value] = APP_HOST
 
 startup_logger.debug(f"Cockpitdecks application server at {APP_HOST}")
 
@@ -692,6 +698,9 @@ def cockpit_wshandler():
         while True:
             data = ws.receive()
             app.logger.debug(f"received {data}")
+            if data is None:
+                app.logger.debug("websocket closed by client")
+                break
             data = json.loads(data)
             code = data.get(CODE)
             if code == 1:
@@ -734,7 +743,7 @@ def main():
             start_desc = __NAME__.title()
 
         logger.info(f"Starting {start_desc}..")
-        if start_acpath is None and SIMULATOR_HOME is not None:
+        if start_acpath is None:
             logger.info(
                 f"(starting without a preloaded aircraft; will load aircraft if {SIMULATOR_NAME} is running and aircraft with Cockpitdecks {CONFIG_FOLDER} loaded)"
             )

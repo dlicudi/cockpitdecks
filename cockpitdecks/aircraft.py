@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 # Aircraft configuration: Loads main config.yaml file
 # and instanciate decks.
 # Link deck to device and start operation with it.
@@ -7,6 +9,7 @@ import os
 import threading
 import pickle
 import time
+from typing import TYPE_CHECKING
 
 from PIL import Image, ImageFont
 from cairosvg import svg2png
@@ -45,6 +48,9 @@ from cockpitdecks.observable import Observables
 from cockpitdecks.variable import Variable, VariableListener
 
 from cockpitdecks.decks.resources import DeckType
+
+if TYPE_CHECKING:
+    from cockpitdecks.cockpit import Cockpit
 
 logger = logging.getLogger(__name__)
 # logger.setLevel(logging.DEBUG)
@@ -666,7 +672,7 @@ class Aircraft:
         for name, deck in self.decks.items():
             deck.reload_page()
 
-    def start(self, acpath: str):
+    def start(self, acpath: str | None):
         """
         Loads decks for aircraft in supplied path.
         First unloads a previously loaded aircraft if any

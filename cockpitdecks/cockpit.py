@@ -1781,7 +1781,7 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
 
         logger.info(f"{len(self.observables)} observables")
 
-    def start_aircraft(self, acpath: str, release: bool = False, mode: int = 0):
+    def start_aircraft(self, acpath: str | None, release: bool = False, mode: int = 0):
         """
         Loads decks for aircraft in supplied path and start listening for key presses.
         """
