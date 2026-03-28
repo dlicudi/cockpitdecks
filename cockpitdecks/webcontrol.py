@@ -463,14 +463,29 @@ def register_web_control(
         deckconfig_path = None
         if ac.acpath is not None:
             deckconfig_path = os.path.abspath(os.path.join(ac.acpath, CONFIG_FOLDER))
-        deck_names = sorted(ac.decks.keys()) if ac.decks else []
+        decks_info = []
+        if ac.decks:
+            for deck_name in sorted(ac.decks.keys()):
+                deck = ac.decks[deck_name]
+                deck_type_name = ""
+                if hasattr(deck, "deck_type") and deck.deck_type and hasattr(deck.deck_type, "name"):
+                    deck_type_name = deck.deck_type.name
+                decks_info.append({
+                    "name": deck_name,
+                    "type": deck_type_name,
+                    "serial": getattr(deck, "serial", None),
+                    "connected": getattr(deck, "device", None) is not None,
+                    "running": getattr(deck, "running", False),
+                    "virtual": deck.is_virtual_deck() if hasattr(deck, "is_virtual_deck") else False,
+                })
         return jsonify(
             {
                 "cockpitdecks_version": __version__,
                 "aircraft_name": ac.name or "",
                 "aircraft_path": ac.acpath,
                 "deckconfig_path": deckconfig_path,
-                "deck_names": deck_names,
+                "deck_names": [d["name"] for d in decks_info],  # kept for backward compat
+                "decks": decks_info,
             }
         )
 
