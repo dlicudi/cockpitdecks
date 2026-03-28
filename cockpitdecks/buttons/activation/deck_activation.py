@@ -332,9 +332,17 @@ class OnOff(Activation):
     def is_on(self):
         value = self.button.value
         if value is not None:
-            if type(value) in [dict, tuple]:  # gets its value from internal state
-                self.onoff_current_value = not self.onoff_current_value if self.onoff_current_value is not None else False
-            elif type(value) is bool:
+            if type(value) in [dict, tuple]:
+                # Representation (e.g. annunciator) returned its state dict — not useful for on/off logic.
+                # Fall back to the underlying formula/dataref value if available.
+                formula_value = self.button._value.value if hasattr(self.button, "_value") else None
+                if formula_value is not None and type(formula_value) in [int, float, bool]:
+                    value = formula_value
+                else:
+                    self.onoff_current_value = not self.onoff_current_value if self.onoff_current_value is not None else False
+                    logger.debug(f"button {self.button_name} is {self.onoff_current_value} from internal state (no formula value)")
+                    return self.onoff_current_value
+            if type(value) is bool:
                 self.onoff_current_value = value
             elif type(value) in [int, float]:
                 value = int(value)
