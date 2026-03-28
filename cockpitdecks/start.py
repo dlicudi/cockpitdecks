@@ -215,12 +215,15 @@ def configure_runtime_logging(data: dict) -> None:
     root_logger = logging.getLogger()
     logging.getLogger("werkzeug").setLevel(logging.WARNING)
     # Engine mode: launched by cockpitdecks-desktop as a managed subprocess.
-    # Stream full DEBUG output to stdout so the desktop app can display it.
+    # Stream output to stdout so the desktop app can capture and filter it.
+    # COCKPITDECKS_LOG_LEVEL controls verbosity (default INFO).
     if os.environ.get("COCKPITDECKS_ENGINE"):
-        root_logger.setLevel(logging.DEBUG)
+        level_name = os.environ.get("COCKPITDECKS_LOG_LEVEL", "INFO").upper()
+        level = getattr(logging, level_name, logging.INFO)
+        root_logger.setLevel(level)
         if not any(isinstance(h, logging.StreamHandler) and getattr(h, "stream", None) is sys.stdout for h in root_logger.handlers):
             handler = logging.StreamHandler(sys.stdout)
-            handler.setLevel(logging.DEBUG)
+            handler.setLevel(level)
             handler.setFormatter(logging.Formatter(FORMAT))
             root_logger.addHandler(handler)
         return
