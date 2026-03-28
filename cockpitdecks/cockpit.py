@@ -2314,11 +2314,17 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
     def get_diagnostics(self) -> dict:
         """Return diagnostics snapshot for /desktop-metrics."""
         # Thread breakdown by name prefix
-        thread_counts = {}
+        # Strip any trailing numeric suffix (e.g. ButtonRender_0, Dummy-3, pool_2)
+        # so ThreadPoolExecutor workers are grouped under their prefix.
+        import re as _re
+        _SUFFIX_RE = _re.compile(r"([_-]\d+)+$")
+        thread_counts: dict[str, int] = {}
         for t in threading.enumerate():
-            # Group by prefix before "::" or first word
             name = t.name
-            prefix = name.split("::")[0] if "::" in name else name.split("-")[0] if "-" in name else name
+            if "::" in name:
+                prefix = name.split("::")[0]
+            else:
+                prefix = _SUFFIX_RE.sub("", name) or name
             thread_counts[prefix] = thread_counts.get(prefix, 0) + 1
 
         # Event loop stats
