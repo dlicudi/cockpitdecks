@@ -533,3 +533,31 @@ def register_web_control(
             return {"status": "not-ready"}, 503
         cockpit.reload_decks()
         return {"status": "ok"}
+
+    @app.route("/api/target", methods=["GET", "POST"])
+    def api_target():
+        cockpit = get_cockpit()
+        rc = get_runtime_config()
+        if request.method == "GET":
+            current_ac = getattr(cockpit, "aircraft", None) if cockpit is not None else None
+            return jsonify({
+                "target": rc.get("target"),
+                "current_aircraft": getattr(current_ac, "name", None),
+                "current_path": getattr(current_ac, "acpath", None),
+            })
+        data = request.get_json(silent=True) or {}
+        target = (data.get("target") or "").strip()
+        if not target:
+            return {"status": "error", "message": "missing target path"}, 400
+        target_path = os.path.abspath(os.path.expanduser(target))
+        if not os.path.isdir(target_path):
+            return {"status": "error", "message": f"path does not exist: {target_path}"}, 400
+        if not os.path.isdir(os.path.join(target_path, CONFIG_FOLDER)):
+            return {"status": "error", "message": f"no {CONFIG_FOLDER} folder in {target_path}"}, 400
+        rc["target"] = target
+        persist_runtime_config(rc)
+        if not cockpit_is_ready():
+            return {"status": "saved", "message": "target saved, cockpit not ready to apply yet"}
+        acname = Aircraft.get_aircraft_name_from_aircraft_path(target_path)
+        cockpit.schedule_aircraft_change(acname=acname, acpath=target_path, liverypath=None)
+        return {"status": "ok", "message": f"switching to {acname}", "path": target_path}
