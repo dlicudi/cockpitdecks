@@ -221,11 +221,16 @@ def configure_runtime_logging(data: dict) -> None:
         level_name = os.environ.get("COCKPITDECKS_LOG_LEVEL", "INFO").upper()
         level = getattr(logging, level_name, logging.INFO)
         root_logger.setLevel(level)
-        if not any(isinstance(h, logging.StreamHandler) and getattr(h, "stream", None) is sys.stdout for h in root_logger.handlers):
-            handler = logging.StreamHandler(sys.stdout)
-            handler.setLevel(level)
-            handler.setFormatter(logging.Formatter(FORMAT))
-            root_logger.addHandler(handler)
+        # Remove any existing console handlers to avoid duplicate output.
+        for h in list(root_logger.handlers):
+            if h is _recent_log_handler:
+                continue
+            if isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler):
+                root_logger.removeHandler(h)
+        handler = logging.StreamHandler(sys.stdout)
+        handler.setLevel(level)
+        handler.setFormatter(logging.Formatter(FORMAT))
+        root_logger.addHandler(handler)
         return
     logging_cfg = config_section(data.get("logging"), "logging")
     console_enabled = logging_cfg.get("console", True)
