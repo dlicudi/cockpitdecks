@@ -2255,6 +2255,9 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
         batch_ms = (t_end - t_render_done) * 1000
         total_ms = (t_end - t_start) * 1000
 
+        if total_ms >= 50.0:
+            logger.info(f"cockpit: flush of {len(dirty_buttons)} buttons took {total_ms:.1f}ms (render={render_ms:.1f}ms, batch={batch_ms:.1f}ms, wait={wait_ms:.1f}ms, flushes={self._dirty_flushes}, rendered={self._dirty_rendered})")
+
         # Diagnostics: accumulate flush timing
         self._diag_flush_count += 1
         self._diag_flush_total_ms += total_ms
