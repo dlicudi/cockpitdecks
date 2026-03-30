@@ -2620,13 +2620,27 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
         logger.info(f"registered deck {deck}")
 
     def is_closed(self, ws):
-        environ = ws.__dict__.get("environ")
-        if environ is None:
+        try:
+            # We first check if the socket appears closed from the environment
+            environ = ws.__dict__.get("environ")
+            if environ is None:
+                return True
+            sock = environ.get("werkzeug.socket")
+            if sock is None:
+                return True
+            if sock.fileno() < 0:
+                return True
+        except Exception:
             return True
-        sock = environ.get("werkzeug.socket")
-        if sock is None:
-            return True
-        return sock.fileno() < 0  # there must be a better way to do this...
+
+        # Next, if it's a simple_websocket, it might have a 'closed' or 'connected' state
+        try:
+            if hasattr(ws, "connected") and not ws.connected:
+                return True
+        except:
+            pass
+
+        return False
 
     def remove_client(self, websocket):
         # we unfortunately have to scan all decks to find the ws to remove
@@ -2656,9 +2670,13 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
                 if self.is_closed(ws):
                     closed_ws.append(ws)
                     continue
-                ws.send(json.dumps(payload))
-                logger.debug(f"sent for {deck}")
-                sent = True
+                try:
+                    ws.send(json.dumps(payload))
+                    logger.debug(f"sent for {deck}")
+                    sent = True
+                except (OSError, Exception) as e:
+                    logger.warning(f"failed to send to {deck}: {e}")
+                    closed_ws.append(ws)
             if len(closed_ws) > 0:
                 for ws in closed_ws:
                     client_list.remove(ws)
