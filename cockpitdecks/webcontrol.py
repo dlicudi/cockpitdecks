@@ -549,6 +549,16 @@ def register_web_control(
         cockpit.reload_decks()
         return {"status": "ok"}
 
+    @app.route("/api/deck/<name>/reload", methods=["POST"])
+    def deck_reload(name):
+        cockpit = get_cockpit()
+        if not cockpit_is_ready():
+            return {"status": "not-ready"}, 503
+        if name not in cockpit.decks:
+            return {"status": "error", "message": f"deck {name} not found"}, 404
+        cockpit.reload_deck(name)
+        return {"status": "ok"}
+
     @app.route("/api/target", methods=["GET", "POST"])
     def api_target():
         cockpit = get_cockpit()

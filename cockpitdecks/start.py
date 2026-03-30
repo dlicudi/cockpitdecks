@@ -847,6 +847,11 @@ def cockpit_wshandler():
             if data is None:
                 app.logger.debug("websocket closed by client")
                 break
+
+            if cockpit is None:
+                app.logger.warning("cockpit not initialized, ignoring message")
+                continue
+
             data = json.loads(data)
             code = data.get(CODE)
             if code == 1:
@@ -868,8 +873,9 @@ def cockpit_wshandler():
                 # app.logger.info(f"event processed deck={deck}, event={event} data={payload}")
     except ConnectionClosed:
         app.logger.debug("connection closed")
-        cockpit.remove_client(ws)
-        app.logger.debug("client removed")
+        if cockpit is not None:
+            cockpit.remove_client(ws)
+            app.logger.debug("client removed")
     return ""
 
 
