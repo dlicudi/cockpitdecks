@@ -639,6 +639,7 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
         self._event_loop_peak_queue = 0
         self._dirty_buttons = {}
         self._dirty_buttons_lock = threading.Lock()
+        self._is_flushing = False
         self._dirty_flush_timer = None
         self._dirty_flush_due_at = None
         self._render_executor = ThreadPoolExecutor(max_workers=12, thread_name_prefix="ButtonRender")
@@ -2199,24 +2200,15 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
             button.render()
             render_times[button.name] = (time.monotonic() - t0) * 1000
 
-        legs_buttons = []
-        sequential_buttons = []
         parallel_buttons = []
+        sequential_buttons = []
         for button in dirty_buttons:
-            if "LEGS" in button.name:
-                legs_buttons.append(button)
-            elif button.deck is not None and not button.deck.allows_parallel_button_rendering():
+            if button.deck is not None and not button.deck.allows_parallel_button_rendering():
                 sequential_buttons.append(button)
             else:
                 parallel_buttons.append(button)
 
-        # Render LEGS buttons sequentially to avoid GIL contention in variable lookups.
-        for button in legs_buttons:
-            try:
-                timed_render(button)
-            except Exception:
-                logger.warning(f"button {button.name}: problem during deferred rendering", exc_info=True)
-
+        # Render sequential buttons first.
         for button in sequential_buttons:
             try:
                 timed_render(button)
@@ -2256,7 +2248,10 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
         total_ms = (t_end - t_start) * 1000
 
         if total_ms >= 50.0:
-            logger.info(f"cockpit: flush of {len(dirty_buttons)} buttons took {total_ms:.1f}ms (render={render_ms:.1f}ms, batch={batch_ms:.1f}ms, wait={wait_ms:.1f}ms, flushes={self._dirty_flushes}, rendered={self._dirty_rendered})")
+            slowest = sorted(render_times.items(), key=lambda x: x[1], reverse=True)[:3]
+            slowest_str = ", ".join([f"{k}: {v:.1f}ms" for k, v in slowest])
+            logger.warning(f"cockpit: flush of {len(dirty_buttons)} buttons took {total_ms:.1f}ms (render={render_ms:.1f}ms, batch={batch_ms:.1f}ms, wait={wait_ms:.1f}ms, flushes={self._dirty_flushes}, rendered={self._dirty_rendered})")
+            logger.warning(f"cockpit: slowest buttons: {slowest_str}")
 
         # Diagnostics: accumulate flush timing
         self._diag_flush_count += 1
@@ -2311,8 +2306,10 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
             self._dirty_flush_timer = None
 
     def _timer_flush(self):
-        self._dirty_flush_timer = None
-        self.flush_dirty_buttons()
+        try:
+            self.flush_dirty_buttons()
+        finally:
+            self._dirty_flush_timer = None
 
     def get_diagnostics(self) -> dict:
         """Return diagnostics snapshot for /desktop-metrics."""

@@ -265,24 +265,15 @@ class Page:
         """
         render_started_at = time.perf_counter()
         all_buttons = list(self.buttons.values())
-        legs_buttons = [b for b in all_buttons if "LEGS" in b.name]
-        other_buttons = [b for b in all_buttons if b not in legs_buttons]
-
-        # Render LEGS buttons sequentially to avoid GIL contention in variable lookups.
-        # Parallel renders cause ~90ms per lookup due to thread contention.
-        for button in legs_buttons:
-            button.render()
-            logger.debug(f"page {self.name}: button {button.name} rendered")
-
-        # Render other buttons using the shared cockpit executor when available.
-        if other_buttons:
+        # Render all buttons using the shared cockpit executor when available.
+        if all_buttons:
             executor = getattr(self.deck.cockpit, "_render_executor", None)
             if executor is None or not self.deck.allows_parallel_button_rendering():
-                for button in other_buttons:
+                for button in all_buttons:
                     button.render()
                     logger.debug(f"page {self.name}: button {button.name} rendered")
             else:
-                futures = {executor.submit(button.render): button for button in other_buttons}
+                futures = {executor.submit(button.render): button for button in all_buttons}
                 for future in futures:
                     future.result()
                     logger.debug(f"page {self.name}: button {futures[future].name} rendered")
