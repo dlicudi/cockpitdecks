@@ -240,6 +240,24 @@ class Aircraft:
                 ret = ret | obs.get_activities()
         return ret
 
+    def validate_deck_names_unique(self) -> tuple[bool, str | None]:
+        decks = self._config.get(CONFIG_KW.DECKS.value, [])
+        seen: set[str] = set()
+        duplicates: list[str] = []
+        for deck in decks:
+            if not isinstance(deck, dict):
+                continue
+            name = deck.get(CONFIG_KW.NAME.value)
+            if not name:
+                continue
+            if name in seen and name not in duplicates:
+                duplicates.append(name)
+            seen.add(name)
+        if duplicates:
+            duplicates_list = ", ".join(sorted(duplicates))
+            return False, f"duplicate deck name(s) in {CONFIG_FILE}: {duplicates_list}. Deck names must be unique."
+        return True, None
+
     # Initialisation, setup
     def scan_web_decks(self):
         """Virtual decks are declared in the cockpit configuration
@@ -710,6 +728,10 @@ class Aircraft:
             self._config = Config(fn)
             if not self._config.is_valid():
                 logger.warning(f"no config file {fn} or file is invalid")
+                return
+            ok, validation_error = self.validate_deck_names_unique()
+            if not ok:
+                logger.error(validation_error)
                 return
 
             self.icao = self._config.get("icao", "ZZZZ")

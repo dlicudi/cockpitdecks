@@ -880,8 +880,6 @@ class Deck {
     //
     set_background_layer(layer) {
         // Add bacground image and resize deck around it.
-        // Resize window as well. Cannot get rid of top bar... (adds 24px)
-        const extra_space = EDITOR_MODE ? 2 * TITLE_BAR_HEIGHT : TITLE_BAR_HEIGHT;
         var stage = this._stage;
         var that = this;
 
@@ -891,8 +889,13 @@ class Deck {
             const height = sizes == undefined || (sizes.constructor != Array) ? DEFAULT_HEIGHT : sizes[1];
             stage.width(width);
             stage.height(height);
-            window.resizeTo(width,height + extra_space);
-            console.log("set_default_size", width,height + extra_space);
+            if (typeof window.cockpitdecksSetDeckSize === "function") {
+                window.cockpitdecksSetDeckSize(width, height);
+            } else {
+                container.style.width = width + "px";
+                container.style.height = height + "px";
+            }
+            console.log("set_default_size", width, height);
         }
 
         this.background_layer = layer
@@ -901,7 +904,7 @@ class Deck {
         const background = this.deck_type.background
         if (background == undefined || background == null) {
             console.log("no background", this.deck_type);
-            set_default_size(this.container, 100, 100, "red");
+            set_default_size(this.container, [DEFAULT_WIDTH, DEFAULT_HEIGHT], "red");
             return;
         }
 
@@ -924,7 +927,6 @@ class Deck {
         // otherwise a default value is used.)
         this._set_default_size = set_default_size
         this._background_sizes = sizes
-        this._background_extra_space = extra_space
         this.set_background_image(BACKGROUND_IMAGE_PATH, bgcolor);
     }
 
@@ -932,7 +934,6 @@ class Deck {
         const stage = this._stage;
         const that = this;
         const sizes = this._background_sizes;
-        const extra_space = this._background_extra_space;
         if (fallback_color != undefined) {
             this.container.style["background-color"] = fallback_color;
         }
@@ -951,12 +952,13 @@ class Deck {
             });
             stage.width(deckImage.naturalWidth);
             stage.height(deckImage.naturalHeight);
-            that.container.style.width = deckImage.naturalWidth + "px";
-            that.container.style.height = deckImage.naturalHeight + "px";
-            window.resizeTo(deckImage.naturalWidth, deckImage.naturalHeight + extra_space);
-            console.log("deckImage.onload", deckImage.naturalWidth, deckImage.naturalHeight + extra_space);
-            original_width = deckImage.naturalWidth;
-            original_height = deckImage.naturalHeight + extra_space;
+            if (typeof window.cockpitdecksSetDeckSize === "function") {
+                window.cockpitdecksSetDeckSize(deckImage.naturalWidth, deckImage.naturalHeight);
+            } else {
+                that.container.style.width = deckImage.naturalWidth + "px";
+                that.container.style.height = deckImage.naturalHeight + "px";
+            }
+            console.log("deckImage.onload", deckImage.naturalWidth, deckImage.naturalHeight);
             that.background_layer.destroyChildren();
             that.background_layer.add(deckbg);
             that.background_node = deckbg;
