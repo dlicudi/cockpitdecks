@@ -122,6 +122,7 @@ class Activation(ActivationBase, VariableListener):
 
         # Long press option
         self._long_press = None
+        self.long_time = self._config.get("long-time", 2)
         long_press = self._config.get(CONFIG_KW.LONG_PRESS.value)
         if long_press is not None:  # a long-press is just a command that gets executed when pressed for a long time
             self._long_press = self.sim.instruction_factory(
@@ -258,8 +259,8 @@ class Activation(ActivationBase, VariableListener):
     def is_pressed(self):
         return self.pressed
 
-    def long_pressed(self, duration: float = 2) -> bool:
-        return self.duration > duration
+    def long_pressed(self, duration: float = None) -> bool:
+        return self.duration > (duration if duration is not None else self.long_time)
 
     def has_beginend_command(self) -> bool:
         if hasattr(self, "_command"):

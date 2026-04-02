@@ -1491,7 +1491,7 @@ class EncoderToggle(Activation, EncoderProperties):
         if type(event) is PushEvent:
             if not super().activate(event):
                 return False
-            if event.pressed:
+            if not event.pressed and not self.long_pressed():
                 self._on = not self._on
                 self._update_toggle_variable()
             return True
