@@ -1,0 +1,334 @@
+name: Build Launcher Windows x64
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_label:
+        description: "Artifact label suffix (e.g. test-windows)"
+        required: true
+        default: manual
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cockpitdecks-windows-x64-build-${{ github.event.inputs.build_label }}
+  cancel-in-progress: false
+
+jobs:
+  build-only:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout cockpitdecks
+        uses: actions/checkout@v4
+        with:
+          path: cockpitdecks
+          fetch-depth: 0
+
+      - name: Resolve build configuration
+        working-directory: cockpitdecks
+        env:
+          MANUAL_BUILD_LABEL: ${{ github.event.inputs.build_label }}
+        run: |
+          set -euo pipefail
+
+          BUILD_LABEL="${MANUAL_BUILD_LABEL:-manual}"
+          MANIFEST_PATH=".github/launcher-macos-arm64.env"
+          if [[ ! -f "${MANIFEST_PATH}" ]]; then
+            echo "::error::Missing manifest ${MANIFEST_PATH}"
+            exit 1
+          fi
+
+          set -a
+          source "${MANIFEST_PATH}"
+          set +a
+
+          required_vars=(
+            COCKPITDECKS_XP_REPOSITORY
+            COCKPITDECKS_XP_REF
+            COCKPITDECKS_LD_REPOSITORY
+            COCKPITDECKS_LD_REF
+            COCKPITDECKS_SD_REPOSITORY
+            COCKPITDECKS_SD_REF
+            COCKPITDECKS_WM_REPOSITORY
+            COCKPITDECKS_WM_REF
+            COCKPITDECKS_EXT_REPOSITORY
+            COCKPITDECKS_EXT_REF
+            COCKPITDECKS_BX_REPOSITORY
+            COCKPITDECKS_BX_REF
+            XPLANE_WEBAPI_REPOSITORY
+            XPLANE_WEBAPI_REF
+            PYTHON_LOUPEDECK_LIVE_REPOSITORY
+            PYTHON_LOUPEDECK_LIVE_REF
+            PYTHON_ELGATO_STREAMDECK_REPOSITORY
+            PYTHON_ELGATO_STREAMDECK_REF
+          )
+
+          for var_name in "${required_vars[@]}"; do
+            if [[ -z "${!var_name:-}" ]]; then
+              echo "::error::${var_name} is not set in ${MANIFEST_PATH}"
+              exit 1
+            fi
+          done
+
+          BUILD_ID="manual-${BUILD_LABEL}-${GITHUB_RUN_ID}"
+
+          {
+            echo "BUILD_ID=${BUILD_ID}"
+            echo "LAUNCHER_MANIFEST_PATH=${MANIFEST_PATH}"
+            echo "PYINSTALLER_DLL_DIR=C:\\msys64\\mingw64\\bin"
+            for var_name in "${required_vars[@]}"; do
+              echo "${var_name}=${!var_name}"
+            done
+          } >> "${GITHUB_ENV}"
+
+          {
+            echo "### Launcher build configuration"
+            echo
+            echo "- build id: \`${BUILD_ID}\`"
+            echo "- runner architecture: \`${PROCESSOR_ARCHITECTURE:-unknown}\`"
+            echo "- cockpitdecks_xp: \`${COCKPITDECKS_XP_REPOSITORY}@${COCKPITDECKS_XP_REF}\`"
+            echo "- cockpitdecks_ld: \`${COCKPITDECKS_LD_REPOSITORY}@${COCKPITDECKS_LD_REF}\`"
+            echo "- cockpitdecks_sd: \`${COCKPITDECKS_SD_REPOSITORY}@${COCKPITDECKS_SD_REF}\`"
+            echo "- cockpitdecks_wm: \`${COCKPITDECKS_WM_REPOSITORY}@${COCKPITDECKS_WM_REF}\`"
+            echo "- cockpitdecks_ext: \`${COCKPITDECKS_EXT_REPOSITORY}@${COCKPITDECKS_EXT_REF}\`"
+            echo "- cockpitdecks_bx: \`${COCKPITDECKS_BX_REPOSITORY}@${COCKPITDECKS_BX_REF}\`"
+            echo "- xplane-webapi: \`${XPLANE_WEBAPI_REPOSITORY}@${XPLANE_WEBAPI_REF}\`"
+            echo "- python-loupedeck-live: \`${PYTHON_LOUPEDECK_LIVE_REPOSITORY}@${PYTHON_LOUPEDECK_LIVE_REF}\`"
+            echo "- python-elgato-streamdeck: \`${PYTHON_ELGATO_STREAMDECK_REPOSITORY}@${PYTHON_ELGATO_STREAMDECK_REF}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Checkout cockpitdecks_xp
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.COCKPITDECKS_XP_REPOSITORY }}
+          ref: ${{ env.COCKPITDECKS_XP_REF }}
+          path: cockpitdecks_xp
+          token: ${{ secrets.GH_PAT || github.token }}
+
+      - name: Checkout cockpitdecks_ld
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.COCKPITDECKS_LD_REPOSITORY }}
+          ref: ${{ env.COCKPITDECKS_LD_REF }}
+          path: cockpitdecks_ld
+          token: ${{ secrets.GH_PAT || github.token }}
+
+      - name: Checkout cockpitdecks_sd
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.COCKPITDECKS_SD_REPOSITORY }}
+          ref: ${{ env.COCKPITDECKS_SD_REF }}
+          path: cockpitdecks_sd
+          token: ${{ secrets.GH_PAT || github.token }}
+
+      - name: Checkout cockpitdecks_wm
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.COCKPITDECKS_WM_REPOSITORY }}
+          ref: ${{ env.COCKPITDECKS_WM_REF }}
+          path: cockpitdecks_wm
+          token: ${{ secrets.GH_PAT || github.token }}
+
+      - name: Checkout cockpitdecks_ext
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.COCKPITDECKS_EXT_REPOSITORY }}
+          ref: ${{ env.COCKPITDECKS_EXT_REF }}
+          path: cockpitdecks_ext
+          token: ${{ secrets.GH_PAT || github.token }}
+
+      - name: Checkout cockpitdecks_bx
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.COCKPITDECKS_BX_REPOSITORY }}
+          ref: ${{ env.COCKPITDECKS_BX_REF }}
+          path: cockpitdecks_bx
+          token: ${{ secrets.GH_PAT || github.token }}
+
+      - name: Checkout xplane-webapi
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.XPLANE_WEBAPI_REPOSITORY }}
+          ref: ${{ env.XPLANE_WEBAPI_REF }}
+          path: xplane-webapi
+          token: ${{ secrets.GH_PAT || github.token }}
+
+      - name: Checkout python-loupedeck-live
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.PYTHON_LOUPEDECK_LIVE_REPOSITORY }}
+          ref: ${{ env.PYTHON_LOUPEDECK_LIVE_REF }}
+          path: python-loupedeck-live
+          token: ${{ secrets.GH_PAT || github.token }}
+
+      - name: Checkout python-elgato-streamdeck
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.PYTHON_ELGATO_STREAMDECK_REPOSITORY }}
+          ref: ${{ env.PYTHON_ELGATO_STREAMDECK_REF }}
+          path: python-elgato-streamdeck
+          token: ${{ secrets.GH_PAT || github.token }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\pip\Cache
+          key: ${{ runner.os }}-pip-${{ hashFiles('cockpitdecks/pyproject.toml', 'cockpitdecks/cockpitdecks.spec', 'cockpitdecks/pyinstaller_runtime_hook.py', 'cockpitdecks/.github/launcher-macos-arm64.env', 'cockpitdecks_xp/pyproject.toml', 'cockpitdecks_ld/pyproject.toml', 'cockpitdecks_sd/pyproject.toml', 'cockpitdecks_wm/pyproject.toml', 'cockpitdecks_ext/pyproject.toml', 'cockpitdecks_bx/pyproject.toml', 'xplane-webapi/pyproject.toml', 'python-loupedeck-live/pyproject.toml', 'python-elgato-streamdeck/setup.py', 'python-elgato-streamdeck/src/StreamDeck/Transport/LibUSBHIDAPI.py') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Set up MSYS2 runtime DLLs
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-cairo
+            mingw-w64-x86_64-hidapi
+
+      - name: Create build virtualenv
+        working-directory: cockpitdecks
+        env:
+          PYINSTALLER_DLL_DIR: C:\msys64\mingw64\bin
+        run: |
+          python -m venv .venv
+          . .venv/Scripts/activate
+          python -m pip install --upgrade pip setuptools wheel hatchling editables
+          python -m pip install pyinstaller requests-cache
+          python -m pip uninstall -y loupedeck streamdeck || true
+          python -m pip install --no-build-isolation -e ../xplane-webapi
+          python -m pip install --no-build-isolation -e ../cockpitdecks_bx
+          python -m pip install --no-build-isolation -e ../cockpitdecks_ext
+          python -m pip install --no-build-isolation -e ../cockpitdecks_wm
+          python -m pip install --no-build-isolation -e ../cockpitdecks_sd
+          python -m pip install --no-build-isolation -e ../cockpitdecks_ld
+          python -m pip install --no-build-isolation -e ../cockpitdecks_xp
+          python -m pip install --no-build-isolation -e .
+          python -m pip install --no-build-isolation -e ../python-elgato-streamdeck
+          python -m pip install --no-build-isolation -e ../python-loupedeck-live
+          python - <<'PY'
+          import Loupedeck
+          import StreamDeck
+          import os
+
+          workspace = os.path.realpath(os.path.join(os.getcwd(), ".."))
+          checks = {
+              "Loupedeck": (Loupedeck.__file__, os.path.join(workspace, "python-loupedeck-live")),
+              "StreamDeck": (StreamDeck.__file__, os.path.join(workspace, "python-elgato-streamdeck")),
+          }
+          for name, (resolved_path, expected_root) in checks.items():
+              resolved = os.path.realpath(resolved_path)
+              expected = os.path.realpath(expected_root)
+              print(f"[verify] {name} import -> {resolved}")
+              if not resolved.startswith(expected + os.sep):
+                  raise SystemExit(f"{name} import is not local: {resolved} (expected under {expected})")
+          PY
+
+      - name: Write build metadata
+        working-directory: cockpitdecks
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          . .venv/Scripts/activate
+          python - <<'PY'
+          import json
+          import os
+          import platform
+          import subprocess
+          from importlib import metadata
+
+          workspace = os.path.abspath(os.path.join(os.getcwd(), ".."))
+
+          repo_map = {
+              "cockpitdecks": {"path": os.getcwd(), "distribution": "cockpitdecks"},
+              "cockpitdecks_xp": {"path": os.path.join(workspace, "cockpitdecks_xp"), "distribution": "cockpitdecks_xp"},
+              "cockpitdecks_ld": {"path": os.path.join(workspace, "cockpitdecks_ld"), "distribution": "cockpitdecks_ld"},
+              "cockpitdecks_sd": {"path": os.path.join(workspace, "cockpitdecks_sd"), "distribution": "cockpitdecks_sd"},
+              "cockpitdecks_wm": {"path": os.path.join(workspace, "cockpitdecks_wm"), "distribution": "cockpitdecks_wm"},
+              "cockpitdecks_ext": {"path": os.path.join(workspace, "cockpitdecks_ext"), "distribution": "cockpitdecks_ext"},
+              "cockpitdecks_bx": {"path": os.path.join(workspace, "cockpitdecks_bx"), "distribution": "cockpitdecks_bx"},
+              "xplane-webapi": {"path": os.path.join(workspace, "xplane-webapi"), "distribution": "xpwebapi"},
+              "python-loupedeck-live": {"path": os.path.join(workspace, "python-loupedeck-live"), "distribution": "loupedeck"},
+              "python-elgato-streamdeck": {"path": os.path.join(workspace, "python-elgato-streamdeck"), "distribution": "streamdeck"},
+          }
+
+          def git(repo_path: str, *args: str) -> str:
+              return subprocess.check_output(["git", "-C", repo_path, *args], text=True).strip()
+
+          metadata_doc = {
+              "build_id": os.environ["BUILD_ID"],
+              "github_event_name": os.environ.get("GITHUB_EVENT_NAME"),
+              "github_ref_name": os.environ.get("GITHUB_REF_NAME"),
+              "github_sha": os.environ.get("GITHUB_SHA"),
+              "github_run_id": os.environ.get("GITHUB_RUN_ID"),
+              "github_repository": os.environ.get("GITHUB_REPOSITORY"),
+              "github_run_url": f"{os.environ.get('GITHUB_SERVER_URL')}/{os.environ.get('GITHUB_REPOSITORY')}/actions/runs/{os.environ.get('GITHUB_RUN_ID')}",
+              "runner_architecture": platform.machine(),
+              "dependencies": {},
+          }
+
+          for name, info in repo_map.items():
+              repo_path = info["path"]
+              metadata_doc["dependencies"][name] = {
+                  "repository": git(repo_path, "config", "--get", "remote.origin.url"),
+                  "commit": git(repo_path, "rev-parse", "HEAD"),
+                  "describe": git(repo_path, "describe", "--tags", "--always"),
+                  "distribution_version": metadata.version(info["distribution"]),
+              }
+
+          with open("build-metadata.json", "w", encoding="utf-8") as fh:
+              json.dump(metadata_doc, fh, indent=2, sort_keys=True)
+              fh.write("\n")
+          PY
+
+      - name: Build launcher
+        working-directory: cockpitdecks
+        env:
+          PYINSTALLER_DLL_DIR: C:\msys64\mingw64\bin
+        run: scripts/build_launcher.sh
+
+      - name: Verify launcher binary
+        working-directory: cockpitdecks
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "dist/cockpitdecks.exe")) { throw "dist/cockpitdecks.exe not found" }
+          & "dist/cockpitdecks.exe" --version
+
+      - name: Package build artifact
+        working-directory: cockpitdecks
+        shell: pwsh
+        run: |
+          $artifactBase = "cockpitdecks-windows-x64-$env:BUILD_ID"
+          Remove-Item -Recurse -Force $artifactBase -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $artifactBase | Out-Null
+          Copy-Item "dist/cockpitdecks.exe" "$artifactBase/"
+          Copy-Item "build-metadata.json" "$artifactBase/"
+          Compress-Archive -Path "$artifactBase/*" -DestinationPath "$artifactBase.zip" -Force
+          $hash = (Get-FileHash "$artifactBase.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash *$artifactBase.zip" | Set-Content "$artifactBase.zip.sha256"
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cockpitdecks-windows-x64-${{ env.BUILD_ID }}
+          path: |
+            cockpitdecks/cockpitdecks-windows-x64-${{ env.BUILD_ID }}.zip
+            cockpitdecks/cockpitdecks-windows-x64-${{ env.BUILD_ID }}.zip.sha256
+            cockpitdecks/build-metadata.json

@@ -17,6 +17,8 @@ hiddenimports = []
 
 _ROOT = os.path.abspath(os.getcwd())
 _WORKSPACE = os.path.abspath(os.path.join(_ROOT, ".."))
+_IS_WINDOWS = sys.platform == "win32"
+_IS_MACOS = sys.platform == "darwin"
 
 
 def _real(path: str) -> str:
@@ -49,6 +51,12 @@ def _bundle_first_existing(candidates: list[str], description: str) -> str | Non
             return candidate
     print(f"[launcher.spec] warning: {description} not found")
     return None
+
+
+def _bundle_candidates(entries: list[tuple[str, list[str]]], group_name: str) -> None:
+    print(f"[launcher.spec] scanning {group_name}")
+    for description, candidates in entries:
+        _bundle_first_existing(candidates, description)
 
 
 def _assert_local_imports():
@@ -121,33 +129,78 @@ hiddenimports += [
     "cockpitdecks_bx.buttons.representation",
 ]
 
-# Bundle libhidapi (required by StreamDeck for USB HID access).
-for _description, _candidates in [
-    ("libhidapi.0.dylib", ["/opt/homebrew/opt/hidapi/lib/libhidapi.0.dylib", "/usr/local/opt/hidapi/lib/libhidapi.0.dylib"]),
-    ("libhidapi.dylib", ["/opt/homebrew/lib/libhidapi.dylib", "/usr/local/lib/libhidapi.dylib"]),
-]:
-    _bundle_first_existing(_candidates, _description)
+if _IS_MACOS:
+    # Bundle libhidapi (required by StreamDeck for USB HID access).
+    _bundle_candidates(
+        [
+            ("libhidapi.0.dylib", ["/opt/homebrew/opt/hidapi/lib/libhidapi.0.dylib", "/usr/local/opt/hidapi/lib/libhidapi.0.dylib"]),
+            ("libhidapi.dylib", ["/opt/homebrew/lib/libhidapi.dylib", "/usr/local/lib/libhidapi.dylib"]),
+        ],
+        "macOS HID libraries",
+    )
 
-# Bundle Cairo and its direct native dependencies used by CairoSVG/cairocffi on macOS.
-for _description, _candidates in [
-    ("libcairo.2.dylib", ["/opt/homebrew/lib/libcairo.2.dylib", "/usr/local/lib/libcairo.2.dylib"]),
-    ("libcairo-gobject.2.dylib", ["/opt/homebrew/lib/libcairo-gobject.2.dylib", "/usr/local/lib/libcairo-gobject.2.dylib"]),
-    ("libpixman-1.0.dylib", ["/opt/homebrew/opt/pixman/lib/libpixman-1.0.dylib", "/usr/local/opt/pixman/lib/libpixman-1.0.dylib"]),
-    ("libpng16.16.dylib", ["/opt/homebrew/opt/libpng/lib/libpng16.16.dylib", "/usr/local/opt/libpng/lib/libpng16.16.dylib"]),
-    ("libfontconfig.1.dylib", ["/opt/homebrew/opt/fontconfig/lib/libfontconfig.1.dylib", "/usr/local/opt/fontconfig/lib/libfontconfig.1.dylib"]),
-    ("libfreetype.6.dylib", ["/opt/homebrew/opt/freetype/lib/libfreetype.6.dylib", "/usr/local/opt/freetype/lib/libfreetype.6.dylib"]),
-    ("libX11.6.dylib", ["/opt/homebrew/opt/libx11/lib/libX11.6.dylib", "/usr/local/opt/libx11/lib/libX11.6.dylib"]),
-    ("libXext.6.dylib", ["/opt/homebrew/opt/libxext/lib/libXext.6.dylib", "/usr/local/opt/libxext/lib/libXext.6.dylib"]),
-    ("libXrender.1.dylib", ["/opt/homebrew/opt/libxrender/lib/libXrender.1.dylib", "/usr/local/opt/libxrender/lib/libXrender.1.dylib"]),
-    ("libxcb.1.dylib", ["/opt/homebrew/opt/libxcb/lib/libxcb.1.dylib", "/usr/local/opt/libxcb/lib/libxcb.1.dylib"]),
-    ("libxcb-render.0.dylib", ["/opt/homebrew/opt/libxcb/lib/libxcb-render.0.dylib", "/usr/local/opt/libxcb/lib/libxcb-render.0.dylib"]),
-    ("libxcb-shm.0.dylib", ["/opt/homebrew/opt/libxcb/lib/libxcb-shm.0.dylib", "/usr/local/opt/libxcb/lib/libxcb-shm.0.dylib"]),
-    ("libXau.6.dylib", ["/opt/homebrew/opt/libxau/lib/libXau.6.dylib", "/usr/local/opt/libxau/lib/libXau.6.dylib"]),
-    ("libXdmcp.6.dylib", ["/opt/homebrew/opt/libxdmcp/lib/libXdmcp.6.dylib", "/usr/local/opt/libxdmcp/lib/libXdmcp.6.dylib"]),
-    ("libglib-2.0.0.dylib", ["/opt/homebrew/opt/glib/lib/libglib-2.0.0.dylib", "/usr/local/opt/glib/lib/libglib-2.0.0.dylib"]),
-    ("libgobject-2.0.0.dylib", ["/opt/homebrew/opt/glib/lib/libgobject-2.0.0.dylib", "/usr/local/opt/glib/lib/libgobject-2.0.0.dylib"]),
-]:
-    _bundle_first_existing(_candidates, _description)
+    # Bundle Cairo and its direct native dependencies used by CairoSVG/cairocffi on macOS.
+    _bundle_candidates(
+        [
+            ("libcairo.2.dylib", ["/opt/homebrew/lib/libcairo.2.dylib", "/usr/local/lib/libcairo.2.dylib"]),
+            ("libcairo-gobject.2.dylib", ["/opt/homebrew/lib/libcairo-gobject.2.dylib", "/usr/local/lib/libcairo-gobject.2.dylib"]),
+            ("libpixman-1.0.dylib", ["/opt/homebrew/opt/pixman/lib/libpixman-1.0.dylib", "/usr/local/opt/pixman/lib/libpixman-1.0.dylib"]),
+            ("libpng16.16.dylib", ["/opt/homebrew/opt/libpng/lib/libpng16.16.dylib", "/usr/local/opt/libpng/lib/libpng16.16.dylib"]),
+            ("libfontconfig.1.dylib", ["/opt/homebrew/opt/fontconfig/lib/libfontconfig.1.dylib", "/usr/local/opt/fontconfig/lib/libfontconfig.1.dylib"]),
+            ("libfreetype.6.dylib", ["/opt/homebrew/opt/freetype/lib/libfreetype.6.dylib", "/usr/local/opt/freetype/lib/libfreetype.6.dylib"]),
+            ("libX11.6.dylib", ["/opt/homebrew/opt/libx11/lib/libX11.6.dylib", "/usr/local/opt/libx11/lib/libX11.6.dylib"]),
+            ("libXext.6.dylib", ["/opt/homebrew/opt/libxext/lib/libXext.6.dylib", "/usr/local/opt/libxext/lib/libXext.6.dylib"]),
+            ("libXrender.1.dylib", ["/opt/homebrew/opt/libxrender/lib/libXrender.1.dylib", "/usr/local/opt/libxrender/lib/libXrender.1.dylib"]),
+            ("libxcb.1.dylib", ["/opt/homebrew/opt/libxcb/lib/libxcb.1.dylib", "/usr/local/opt/libxcb/lib/libxcb.1.dylib"]),
+            ("libxcb-render.0.dylib", ["/opt/homebrew/opt/libxcb/lib/libxcb-render.0.dylib", "/usr/local/opt/libxcb/lib/libxcb-render.0.dylib"]),
+            ("libxcb-shm.0.dylib", ["/opt/homebrew/opt/libxcb/lib/libxcb-shm.0.dylib", "/usr/local/opt/libxcb/lib/libxcb-shm.0.dylib"]),
+            ("libXau.6.dylib", ["/opt/homebrew/opt/libxau/lib/libXau.6.dylib", "/usr/local/opt/libxau/lib/libXau.6.dylib"]),
+            ("libXdmcp.6.dylib", ["/opt/homebrew/opt/libxdmcp/lib/libXdmcp.6.dylib", "/usr/local/opt/libxdmcp/lib/libXdmcp.6.dylib"]),
+            ("libglib-2.0.0.dylib", ["/opt/homebrew/opt/glib/lib/libglib-2.0.0.dylib", "/usr/local/opt/glib/lib/libglib-2.0.0.dylib"]),
+            ("libgobject-2.0.0.dylib", ["/opt/homebrew/opt/glib/lib/libgobject-2.0.0.dylib", "/usr/local/opt/glib/lib/libgobject-2.0.0.dylib"]),
+        ],
+        "macOS Cairo libraries",
+    )
+elif _IS_WINDOWS:
+    # First-pass Windows packaging uses GTK/MSYS2-provided Cairo and hidapi DLLs when present.
+    _WINDOWS_DLL_ROOTS = [
+        os.environ.get("PYINSTALLER_DLL_DIR"),
+        r"C:\msys64\mingw64\bin",
+        r"C:\msys64\ucrt64\bin",
+        r"C:\Program Files\GTK3-Runtime Win64\bin",
+        r"C:\gtk\bin",
+    ]
+    _WINDOWS_DLL_ROOTS = [root for root in _WINDOWS_DLL_ROOTS if root]
+
+    def _win_candidates(*names: str) -> list[str]:
+        return [os.path.join(root, name) for root in _WINDOWS_DLL_ROOTS for name in names]
+
+    _bundle_candidates(
+        [
+            ("hidapi.dll", _win_candidates("hidapi.dll", "libhidapi-0.dll", "libhidapi.dll")),
+        ],
+        "Windows HID libraries",
+    )
+
+    _bundle_candidates(
+        [
+            ("cairo DLL", _win_candidates("libcairo-2.dll", "cairo-2.dll")),
+            ("cairo-gobject DLL", _win_candidates("libcairo-gobject-2.dll", "cairo-gobject-2.dll")),
+            ("pixman DLL", _win_candidates("libpixman-1-0.dll", "pixman-1-0.dll")),
+            ("png DLL", _win_candidates("libpng16-16.dll", "libpng16.dll")),
+            ("fontconfig DLL", _win_candidates("libfontconfig-1.dll", "fontconfig-1.dll")),
+            ("freetype DLL", _win_candidates("libfreetype-6.dll", "freetype-6.dll")),
+            ("glib DLL", _win_candidates("libglib-2.0-0.dll", "glib-2.0-0.dll")),
+            ("gobject DLL", _win_candidates("libgobject-2.0-0.dll", "gobject-2.0-0.dll")),
+            ("ffi DLL", _win_candidates("libffi-8.dll", "libffi-7.dll")),
+            ("expat DLL", _win_candidates("libexpat-1.dll", "expat.dll")),
+            ("zlib DLL", _win_candidates("zlib1.dll")),
+            ("brotli common DLL", _win_candidates("libbrotlicommon.dll", "brotlicommon.dll")),
+            ("brotli dec DLL", _win_candidates("libbrotlidec.dll", "brotlidec.dll")),
+            ("bz2 DLL", _win_candidates("libbz2-1.dll", "bz2.dll")),
+        ],
+        "Windows Cairo libraries",
+    )
 
 a = Analysis(
     ["launcher.py"],

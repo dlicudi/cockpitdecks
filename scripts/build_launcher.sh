@@ -4,10 +4,23 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+if [[ -x ".venv/bin/pyinstaller" ]]; then
+  PYINSTALLER=".venv/bin/pyinstaller"
+elif [[ -x ".venv/Scripts/pyinstaller.exe" ]]; then
+  PYINSTALLER=".venv/Scripts/pyinstaller.exe"
+else
+  echo "[build] pyinstaller not found in .venv"
+  exit 1
+fi
+
 echo "[build] cleaning cockpitdecks build artifacts"
-python3 -c "import shutil, os; [shutil.rmtree(d) for d in ('build','dist') if os.path.exists(d)]"
+python -c "import shutil, os; [shutil.rmtree(d) for d in ('build','dist') if os.path.exists(d)]"
 
 echo "[build] building cockpitdecks"
-.venv/bin/pyinstaller --clean cockpitdecks.spec
+"$PYINSTALLER" --clean cockpitdecks.spec
 
-echo "Build complete: $ROOT_DIR/dist/cockpitdecks"
+if [[ -f "$ROOT_DIR/dist/cockpitdecks.exe" ]]; then
+  echo "Build complete: $ROOT_DIR/dist/cockpitdecks.exe"
+else
+  echo "Build complete: $ROOT_DIR/dist/cockpitdecks"
+fi

@@ -139,12 +139,24 @@ This keeps the launcher release reproducible even when the dependency repos keep
 
 For CI verification without creating a GitHub Release, run `.github/workflows/build-macos-arm64.yml` manually. It uses the same manifest and build steps, but only uploads the tarball, checksum, and `build-metadata.json` as Actions artifacts.
 
+### Automated Windows x64 build
+
+GitHub Actions can also produce a first-pass Windows x64 launcher artifact from this repo.
+
+- Workflow: `.github/workflows/build-windows-x64.yml`
+- Dependency manifest: `.github/launcher-macos-arm64.env`
+- Runner: `windows-latest`
+- Output artifact: `cockpitdecks-windows-x64-<build-id>.zip`
+- Release status: build-only for now, not yet a public GitHub Release workflow
+
+The Windows workflow uses the same pinned sibling-repo refs as the macOS build, installs Cairo and hidapi DLLs from MSYS2, and bundles those DLLs into the PyInstaller output. This is intended to validate frozen Windows packaging before adding an official Windows release workflow.
+
 ### Notes
 
 - If a package is not installed, the spec logs the `collect_all` failure and continues.
 - Some backends are only needed for specific devices or integrations, so the bundled app may still be valid even if not every optional package is present.
 - `cockpitdecks_ext` currently uses a stack tag in the manifest because that repo does not yet expose a matching semantic-version tag.
-- The launcher spec also bundles the native Cairo dylib set used by `CairoSVG` and preloads those bundled libraries at startup so the frozen app does not rely on a Homebrew Cairo install being discoverable at runtime.
+- The launcher spec bundles native Cairo and HID libraries for the current platform and preloads those bundled libraries at startup so the frozen app does not rely on a system install being discoverable at runtime.
 
 ## Developer note
 
