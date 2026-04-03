@@ -2250,8 +2250,8 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
         if total_ms >= 50.0:
             slowest = sorted(render_times.items(), key=lambda x: x[1], reverse=True)[:3]
             slowest_str = ", ".join([f"{k}: {v:.1f}ms" for k, v in slowest])
-            logger.warning(f"cockpit: flush of {len(dirty_buttons)} buttons took {total_ms:.1f}ms (render={render_ms:.1f}ms, batch={batch_ms:.1f}ms, wait={wait_ms:.1f}ms, flushes={self._dirty_flushes}, rendered={self._dirty_rendered})")
-            logger.warning(f"cockpit: slowest buttons: {slowest_str}")
+            logger.info(f"cockpit: flush of {len(dirty_buttons)} buttons took {total_ms:.1f}ms (render={render_ms:.1f}ms, batch={batch_ms:.1f}ms, wait={wait_ms:.1f}ms, flushes={self._dirty_flushes}, rendered={self._dirty_rendered})")
+            logger.info(f"cockpit: slowest buttons: {slowest_str}")
 
         # Diagnostics: accumulate flush timing
         self._diag_flush_count += 1
