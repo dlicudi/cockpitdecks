@@ -83,6 +83,9 @@ def _load_bundled_cairo() -> None:
         ]
     elif sys.platform == "win32":
         preload_order = [
+            "libwinpthread-1.dll",
+            "libgcc_s_seh-1.dll",
+            "libstdc++-6.dll",
             "zlib1.dll",
             "libbz2-1.dll",
             "libbrotlicommon.dll",
@@ -90,10 +93,18 @@ def _load_bundled_cairo() -> None:
             "libpng16-16.dll",
             "libfreetype-6.dll",
             "libexpat-1.dll",
+            "libintl-8.dll",
+            "libiconv-2.dll",
+            "libgraphite2.dll",
+            "libharfbuzz-0.dll",
             "libfontconfig-1.dll",
+            "libpcre2-8-0.dll",
             "libffi-8.dll",
             "libglib-2.0-0.dll",
             "libgobject-2.0-0.dll",
+            "libgmodule-2.0-0.dll",
+            "libgthread-2.0-0.dll",
+            "libgio-2.0-0.dll",
             "libpixman-1-0.dll",
             "libcairo-2.dll",
             "libcairo-gobject-2.dll",
