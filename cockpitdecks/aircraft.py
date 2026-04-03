@@ -631,7 +631,7 @@ class Aircraft:
                 else:
                     logger.warning(f"deck {name} already exist, ignoring")
             else:
-                logger.error(f"deck {deck_type} {name} has no device, ignoring")
+                logger.warning(f"deck {deck_type} {name} has no device, ignoring")
 
         logger.info(f"create_decks total took {(time.perf_counter() - create_decks_started_at) * 1000.0:.1f}ms")
 
