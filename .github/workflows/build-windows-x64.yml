@@ -207,16 +207,16 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel hatchling editables
           python -m pip install pyinstaller requests-cache
           python -m pip uninstall -y loupedeck streamdeck || true
-          python -m pip install --no-build-isolation -e ../xplane-webapi
-          python -m pip install --no-build-isolation -e ../cockpitdecks_bx
-          python -m pip install --no-build-isolation -e ../cockpitdecks_ext
-          python -m pip install --no-build-isolation -e ../cockpitdecks_wm
-          python -m pip install --no-build-isolation -e ../cockpitdecks_sd
-          python -m pip install --no-build-isolation -e ../cockpitdecks_ld
-          python -m pip install --no-build-isolation -e ../cockpitdecks_xp
-          python -m pip install --no-build-isolation -e .
-          python -m pip install --no-build-isolation -e ../python-elgato-streamdeck
-          python -m pip install --no-build-isolation -e ../python-loupedeck-live
+          python -m pip install --no-build-isolation --no-deps -e ../xplane-webapi
+          python -m pip install --no-build-isolation --no-deps -e ../cockpitdecks_bx
+          python -m pip install --no-build-isolation --no-deps -e ../cockpitdecks_ext
+          python -m pip install --no-build-isolation --no-deps -e ../cockpitdecks_wm
+          python -m pip install --no-build-isolation --no-deps -e ../cockpitdecks_sd
+          python -m pip install --no-build-isolation --no-deps -e ../cockpitdecks_ld
+          python -m pip install --no-build-isolation --no-deps -e ../cockpitdecks_xp
+          python -m pip install --no-build-isolation --no-deps -e .
+          python -m pip install --no-build-isolation --no-deps -e ../python-elgato-streamdeck
+          python -m pip install --no-build-isolation --no-deps -e ../python-loupedeck-live
           python - <<'PY'
           import Loupedeck
           import StreamDeck
