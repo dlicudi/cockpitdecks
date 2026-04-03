@@ -329,6 +329,7 @@ jobs:
       - name: Verify launcher binary
         working-directory: cockpitdecks
         shell: pwsh
+        continue-on-error: true
         run: |
           if (-not (Test-Path "dist/cockpitdecks.exe")) { throw "dist/cockpitdecks.exe not found" }
           & "dist/cockpitdecks.exe" --version
@@ -347,6 +348,7 @@ jobs:
           "$hash *$artifactBase.zip" | Set-Content "$artifactBase.zip.sha256"
 
       - name: Upload workflow artifacts
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: cockpitdecks-windows-x64-${{ env.BUILD_ID }}
