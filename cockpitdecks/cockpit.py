@@ -31,7 +31,13 @@ from packaging.requirements import Requirement
 
 from PIL import Image, ImageFont
 
-from cairosvg import svg2png
+try:
+    from cairosvg import svg2png
+except Exception as exc:
+    _svg2png_import_error = exc
+
+    def svg2png(*args, **kwargs):
+        raise OSError(f"cairosvg unavailable: {_svg2png_import_error}") from _svg2png_import_error
 
 from usbmonitor import USBMonitor
 from usbmonitor.attributes import ID_SERIAL
