@@ -14,6 +14,7 @@ block_cipher = None
 datas = []
 binaries = []
 hiddenimports = []
+BUNDLED_BINARY_PATHS = set()
 
 _ROOT = os.path.abspath(os.getcwd())
 _WORKSPACE = os.path.abspath(os.path.join(_ROOT, ".."))
@@ -46,7 +47,11 @@ def _bundle_first_existing(candidates: list[str], description: str) -> str | Non
     for candidate in candidates:
         candidate = _real(candidate)
         if os.path.exists(candidate):
+            if candidate in BUNDLED_BINARY_PATHS:
+                print(f"[launcher.spec] already bundled {description}: {candidate}")
+                return candidate
             binaries.append((candidate, "."))
+            BUNDLED_BINARY_PATHS.add(candidate)
             print(f"[launcher.spec] bundling {description}: {candidate}")
             return candidate
     print(f"[launcher.spec] warning: {description} not found")
@@ -57,6 +62,26 @@ def _bundle_candidates(entries: list[tuple[str, list[str]]], group_name: str) ->
     print(f"[launcher.spec] scanning {group_name}")
     for description, candidates in entries:
         _bundle_first_existing(candidates, description)
+
+
+def _bundle_all_matching(directory: str, suffix: str, group_name: str) -> None:
+    directory = _real(directory)
+    if not os.path.isdir(directory):
+        print(f"[launcher.spec] warning: {group_name} directory not found: {directory}")
+        return
+
+    print(f"[launcher.spec] bundling all {suffix} files from {directory} for {group_name}")
+    count = 0
+    for name in sorted(os.listdir(directory)):
+        if not name.lower().endswith(suffix.lower()):
+            continue
+        path = _real(os.path.join(directory, name))
+        if path in BUNDLED_BINARY_PATHS:
+            continue
+        binaries.append((path, "."))
+        BUNDLED_BINARY_PATHS.add(path)
+        count += 1
+    print(f"[launcher.spec] bundled {count} files from {directory}")
 
 
 def _assert_local_imports():
@@ -212,6 +237,10 @@ elif _IS_WINDOWS:
         ],
         "Windows Cairo libraries",
     )
+
+    # First-pass safety net: bundle the full MSYS2/GTK DLL directory used for Cairo.
+    for _dll_root in _WINDOWS_DLL_ROOTS:
+        _bundle_all_matching(_dll_root, ".dll", f"Windows DLL fallback from {_dll_root}")
 
 a = Analysis(
     ["launcher.py"],
