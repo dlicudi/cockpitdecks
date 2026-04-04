@@ -2685,7 +2685,8 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
                     closed_ws.append(ws)
             if len(closed_ws) > 0:
                 for ws in closed_ws:
-                    client_list.remove(ws)
+                    if ws in client_list:
+                        client_list.remove(ws)
         else:
             if deck not in self.vd_errs:
                 logger.debug(f"no client for {deck}")  # warning
