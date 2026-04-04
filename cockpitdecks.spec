@@ -202,7 +202,7 @@ elif _IS_WINDOWS:
 
     _bundle_candidates(
         [
-            ("hidapi.dll", _win_candidates("libhidapi-0.dll", "libhidapi.dll", "hidapi.dll")),
+            ("hidapi.dll", _win_candidates("libhidapi-0.dll", "libhidapi.dll", "hidapi.dll", "libhidapi-libusb-0.dll", "hidapi-libusb.dll")),
             ("libusb-1.0.dll", _win_candidates("libusb-1.0.dll")),
         ],
         "Windows HID libraries",
