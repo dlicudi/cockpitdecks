@@ -334,7 +334,7 @@ jobs:
           if (-not (Test-Path "dist/cockpitdecks.exe")) { throw "dist/cockpitdecks.exe not found" }
           & "dist/cockpitdecks.exe" --version
 
-      - name: Package build artifact
+      - name: Stage build artifact
         working-directory: cockpitdecks
         shell: pwsh
         run: |
@@ -343,16 +343,12 @@ jobs:
           New-Item -ItemType Directory -Path $artifactBase | Out-Null
           Copy-Item "dist/cockpitdecks.exe" "$artifactBase/"
           Copy-Item "build-metadata.json" "$artifactBase/"
-          Compress-Archive -Path "$artifactBase/*" -DestinationPath "$artifactBase.zip" -Force
-          $hash = (Get-FileHash "$artifactBase.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash *$artifactBase.zip" | Set-Content "$artifactBase.zip.sha256"
+          $exeHash = (Get-FileHash "$artifactBase/cockpitdecks.exe" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$exeHash *cockpitdecks.exe" | Set-Content "$artifactBase/cockpitdecks.exe.sha256"
 
       - name: Upload workflow artifacts
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: cockpitdecks-windows-x64-${{ env.BUILD_ID }}
-          path: |
-            cockpitdecks/cockpitdecks-windows-x64-${{ env.BUILD_ID }}.zip
-            cockpitdecks/cockpitdecks-windows-x64-${{ env.BUILD_ID }}.zip.sha256
-            cockpitdecks/build-metadata.json
+          path: cockpitdecks/cockpitdecks-windows-x64-${{ env.BUILD_ID }}
