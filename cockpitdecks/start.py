@@ -455,12 +455,18 @@ startup_logger.debug(f"{ENVIRON_KW.COCKPITDECKS_PATH.value}={COCKPITDECKS_PATH}"
 # X-Plane Web API connection
 #
 xplane_api = config_section(runtime_config.get("xplane_api"), "xplane_api")
-api_host = xplane_api.get("host")
-if not api_host:
-    api_host = os.getenv(ENVIRON_KW.API_HOST.value) or environment.get(ENVIRON_KW.API_HOST.value) or "127.0.0.1"
-api_port = config_port(xplane_api.get("port"), default=8086, name="xplane_api.port")
-if "port" not in xplane_api:
-    api_port = config_port(os.getenv(ENVIRON_KW.API_PORT.value) or environment.get(ENVIRON_KW.API_PORT.value), default=8086, name=ENVIRON_KW.API_PORT.value)
+api_host_env = os.getenv(ENVIRON_KW.API_HOST.value) or environment.get(ENVIRON_KW.API_HOST.value)
+api_port_env = os.getenv(ENVIRON_KW.API_PORT.value) or environment.get(ENVIRON_KW.API_PORT.value)
+if os.getenv("COCKPITDECKS_ENGINE"):
+    api_host = api_host_env or xplane_api.get("host") or "127.0.0.1"
+    api_port = config_port(api_port_env, default=xplane_api.get("port", 8086), name=ENVIRON_KW.API_PORT.value)
+else:
+    api_host = xplane_api.get("host")
+    if not api_host:
+        api_host = api_host_env or "127.0.0.1"
+    api_port = config_port(xplane_api.get("port"), default=8086, name="xplane_api.port")
+    if "port" not in xplane_api:
+        api_port = config_port(api_port_env, default=8086, name=ENVIRON_KW.API_PORT.value)
 environment[ENVIRON_KW.API_HOST.value] = str(api_host)
 environment[ENVIRON_KW.API_PORT.value] = int(api_port)
 startup_logger.debug(f"X-Plane API at {api_host}:{api_port}")
