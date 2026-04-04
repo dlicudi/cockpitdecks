@@ -225,7 +225,7 @@ class VirtualDeck(DeckWithIcons):
             return
         meta = {"ts": datetime.now().timestamp()}  # dummy
         typ = sound.split(".")[-1]
-        payload = {"code": 2, "deck": self.name, "sound": base64.encodebytes(content).decode("ascii"), "type": typ, "meta": meta}
+        payload = {"code": 2, "deck": self.name, "sound": base64.b64encode(content).decode("ascii"), "type": typ, "meta": meta}
         self.cockpit.send(deck=self.name, payload=payload)
 
     def set_key_icon(self, key, image):
@@ -261,7 +261,7 @@ class VirtualDeck(DeckWithIcons):
         image.save(img_byte_arr, format="PNG")
         content = img_byte_arr.getvalue()
         meta = {"ts": datetime.now().timestamp()}  # dummy
-        payload = {"code": 0, "deck": self.name, "key": key, "image": base64.encodebytes(content).decode("ascii"), "meta": meta}
+        payload = {"code": 0, "deck": self.name, "key": key, "image": base64.b64encode(content).decode("ascii"), "meta": meta}
         self.cockpit.send(deck=self.name, payload=payload)
 
     def fill_empty_hardware_representation(self, key, page):
@@ -302,7 +302,7 @@ class VirtualDeck(DeckWithIcons):
         image.save(img_byte_arr, format="PNG")
         content = img_byte_arr.getvalue()
         meta = {"ts": datetime.now().timestamp()}  # dummy
-        payload = {"code": 0, "deck": self.name, "key": key, "image": base64.encodebytes(content).decode("ascii"), "meta": meta}
+        payload = {"code": 0, "deck": self.name, "key": key, "image": base64.b64encode(content).decode("ascii"), "meta": meta}
         # print(">>>>>", {"code": 0, "deck": self.name, "key": key, "image": image, "meta": meta})
         self.cockpit.send(deck=self.name, payload=payload)
 
