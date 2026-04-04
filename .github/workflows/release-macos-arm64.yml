@@ -46,7 +46,7 @@ jobs:
             exit 1
           fi
 
-          MANIFEST_PATH=".github/launcher-macos-arm64.env"
+          MANIFEST_PATH=".github/cockpitdecks-release-deps.env"
           if [[ ! -f "${MANIFEST_PATH}" ]]; then
             echo "::error::Missing manifest ${MANIFEST_PATH}"
             exit 1
@@ -217,7 +217,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('cockpitdecks/pyproject.toml', 'cockpitdecks/cockpitdecks.spec', 'cockpitdecks/pyinstaller_runtime_hook.py', 'cockpitdecks/.github/launcher-macos-arm64.env', 'cockpitdecks_xp/pyproject.toml', 'cockpitdecks_ld/pyproject.toml', 'cockpitdecks_sd/pyproject.toml', 'cockpitdecks_wm/pyproject.toml', 'cockpitdecks_ext/pyproject.toml', 'cockpitdecks_bx/pyproject.toml', 'xplane-webapi/pyproject.toml', 'python-loupedeck-live/pyproject.toml', 'python-elgato-streamdeck/setup.py', 'python-elgato-streamdeck/src/StreamDeck/Transport/LibUSBHIDAPI.py') }}
+          key: ${{ runner.os }}-pip-${{ hashFiles('cockpitdecks/pyproject.toml', 'cockpitdecks/cockpitdecks.spec', 'cockpitdecks/pyinstaller_runtime_hook.py', 'cockpitdecks/.github/cockpitdecks-release-deps.env', 'cockpitdecks_xp/pyproject.toml', 'cockpitdecks_ld/pyproject.toml', 'cockpitdecks_sd/pyproject.toml', 'cockpitdecks_wm/pyproject.toml', 'cockpitdecks_ext/pyproject.toml', 'cockpitdecks_bx/pyproject.toml', 'xplane-webapi/pyproject.toml', 'python-loupedeck-live/pyproject.toml', 'python-elgato-streamdeck/setup.py', 'python-elgato-streamdeck/src/StreamDeck/Transport/LibUSBHIDAPI.py') }}
           restore-keys: |
             ${{ runner.os }}-pip-
 

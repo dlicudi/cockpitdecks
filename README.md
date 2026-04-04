@@ -111,7 +111,7 @@ GitHub Actions can build and publish a macOS arm64 launcher release from this re
 
 - Workflow: `.github/workflows/release-macos-arm64.yml`
 - Build-only workflow: `.github/workflows/build-macos-arm64.yml`
-- Dependency manifest: `.github/launcher-macos-arm64.env`
+- Dependency manifest: `.github/cockpitdecks-release-deps.env`
 - Trigger: push a tag matching `v*`
 - Manual trigger: `workflow_dispatch` with a required `release_tag`
 - Runner: `macos-14`
@@ -125,13 +125,13 @@ git tag v15.15.2-beta.2
 git push origin v15.15.2-beta.2
 ```
 
-The workflow checks out the sibling Cockpitdecks repos into the workspace layout expected by `cockpitdecks.spec`, using the exact refs pinned in `.github/launcher-macos-arm64.env`. It then builds `dist/cockpitdecks`, verifies it is `arm64`, records the resolved commits and Python distribution versions in `build-metadata.json`, and uploads the tarball plus a SHA-256 checksum.
+The workflow checks out the sibling Cockpitdecks repos into the workspace layout expected by `cockpitdecks.spec`, using the exact refs pinned in `.github/cockpitdecks-release-deps.env`. It then builds `dist/cockpitdecks`, verifies it is `arm64`, records the resolved commits and Python distribution versions in `build-metadata.json`, and uploads the tarball plus a SHA-256 checksum.
 
 When recreating the build environment, the workflow installs the local repos with `--no-build-isolation` and removes any pre-existing wheel install of `loupedeck` first. This avoids accidentally freezing a PyPI copy instead of the checked-out `python-loupedeck-live` repository.
 
 Recommended release flow:
 
-1. Update `.github/launcher-macos-arm64.env` to the dependency refs you want to ship.
+1. Update `.github/cockpitdecks-release-deps.env` to the dependency refs you want to ship.
 2. Commit that manifest change in `cockpitdecks`.
 3. Push a release tag such as `v15.15.2-beta.2`.
 
@@ -144,7 +144,7 @@ For CI verification without creating a GitHub Release, run `.github/workflows/bu
 GitHub Actions can also produce a first-pass Windows x64 launcher artifact from this repo.
 
 - Workflow: `.github/workflows/build-windows-x64.yml`
-- Dependency manifest: `.github/launcher-macos-arm64.env`
+- Dependency manifest: `.github/cockpitdecks-release-deps.env`
 - Runner: `windows-latest`
 - Output artifact: `cockpitdecks-windows-x64-<build-id>.zip`
 - Release status: build-only for now, not yet a public GitHub Release workflow
