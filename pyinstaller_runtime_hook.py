@@ -153,9 +153,9 @@ def _load_bundled_hidapi() -> None:
     hidapi_candidates = [
         os.path.join(base_dir, "libhidapi.0.dylib"),
         os.path.join(base_dir, "libhidapi.dylib"),
-        os.path.join(base_dir, "hidapi.dll"),
         os.path.join(base_dir, "libhidapi-0.dll"),
         os.path.join(base_dir, "libhidapi.dll"),
+        os.path.join(base_dir, "hidapi.dll"),
     ]
     hidapi_path = next((p for p in hidapi_candidates if os.path.exists(p)), None)
     if not hidapi_path:
