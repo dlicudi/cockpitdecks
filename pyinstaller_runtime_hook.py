@@ -136,6 +136,16 @@ def _load_bundled_hidapi() -> None:
     elif sys.platform == "win32":
         _register_windows_dll_dir(base_dir)
 
+    if sys.platform == "win32":
+        for dependency_name in ("libusb-1.0.dll",):
+            dependency_path = os.path.join(base_dir, dependency_name)
+            if not os.path.exists(dependency_path):
+                continue
+            try:
+                ctypes.WinDLL(dependency_path)
+            except OSError as exc:
+                print(f"[pyinstaller_runtime_hook] warning: failed to preload {dependency_name}: {exc}", flush=True)
+
     hidapi_candidates = [
         os.path.join(base_dir, "libhidapi.0.dylib"),
         os.path.join(base_dir, "libhidapi.dylib"),
