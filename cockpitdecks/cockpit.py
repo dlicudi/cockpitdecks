@@ -570,6 +570,11 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
         self.all_extensions = set(self.all_extensions)
         self.requested_extensions = set(self.all_extensions)
         self.all_extensions.update(COCKPITDECKS_INTERNAL_EXTENSIONS)
+        if sys.platform == "win32" and "cockpitdecks_bx" not in self.requested_extensions:
+            # The XTouchMini dependency chain is not packaged/supported in the Windows launcher.
+            # Keep the built-in extension set quieter there unless the user explicitly requests it.
+            self.all_extensions.discard("cockpitdecks_bx")
+            logger.info("skipping cockpitdecks_bx on Windows; load it explicitly to enable X-Touch Mini support")
         if is_free_threaded_python() and "cockpitdecks_wm" not in self.requested_extensions:
             # cockpitdecks_wm pulls in timezonefinder -> h3, which currently re-enables the GIL
             self.all_extensions.discard("cockpitdecks_wm")
@@ -964,14 +969,21 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
             logger.error("no driver")
             return
         driver_info = []
-        for deck_driver in self.all_deck_drivers:
+        for deck_driver, builder in self.all_deck_drivers.items():
             try:
                 desc = f"{deck_driver} {importlib.metadata.version(deck_driver)}"
                 driver_info.append(desc)
-            except:
+            except Exception:
                 if deck_driver == VirtualDeck.DRIVER_NAME:
                     desc = f"{deck_driver} {VirtualDeck.DRIVER_VERSION}"
                     driver_info.append(desc)
+                    continue
+                deck_cls = builder[0]
+                min_version = getattr(deck_cls, "MIN_DRIVER_VERSION", None)
+                if min_version is not None:
+                    desc = f"{deck_driver} >= {min_version}"
+                    driver_info.append(desc)
+                    logger.info(f"driver metadata unavailable for {deck_driver}, using minimum supported version {min_version}")
                     continue
                 logger.warning(f"no driver information for {deck_driver}")
         if len(driver_info) == 0:
