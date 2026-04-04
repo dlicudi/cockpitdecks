@@ -2593,7 +2593,7 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
             if deck is None:
                 logger.warning(f"handle code: deck {name} not found (code {code})")
                 return
-            deck.remove_client()
+            deck.remove_client(disconnected=True)
             logger.debug(f"{name} closed")
         elif code in [4, 5]:
             payload = {

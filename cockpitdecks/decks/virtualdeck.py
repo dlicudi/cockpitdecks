@@ -62,10 +62,10 @@ class VirtualDeck(DeckWithIcons):
     def add_client(self):
         self.clients = self.clients + 1
 
-    def remove_client(self):
+    def remove_client(self, disconnected: bool = False):
         if self.clients > 0:
             self.clients = self.clients - 1
-        if not self.has_clients() and not self.is_connected():
+        if not self.has_clients() and (disconnected or not self.is_connected()):
             logger.debug("no more client, disconnecting..")
             self.disconnect()
             logger.debug("..disconnected")
