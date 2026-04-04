@@ -4,6 +4,10 @@ import os
 import sys
 
 
+_ORIGINAL_CDLL_LOADLIBRARY = ctypes.cdll.LoadLibrary
+_ORIGINAL_CDLL = ctypes.CDLL
+
+
 def _prepend_env_path(name: str, value: str) -> None:
     current = os.environ.get(name, "")
     parts = [p for p in current.split(os.pathsep) if p]
@@ -159,8 +163,12 @@ def _load_bundled_hidapi() -> None:
 
     hidapi_aliases = {
         "hidapi",
+        "hidapi.dll",
         "hidapi-libusb",
         "libhidapi",
+        "libhidapi.dll",
+        "libhidapi-0",
+        "libhidapi-0.dll",
         "libhidapi.0",
     }
 
@@ -172,6 +180,24 @@ def _load_bundled_hidapi() -> None:
         return original_find_library(name)
 
     ctypes.util.find_library = _patched_find_library
+
+    def _resolve_hidapi_target(name):
+        if isinstance(name, str):
+            if name in hidapi_aliases:
+                return hidapi_path
+            basename = os.path.basename(name)
+            if basename in hidapi_aliases:
+                return hidapi_path
+        return name
+
+    def _patched_cdll_loadlibrary(name):
+        return _ORIGINAL_CDLL_LOADLIBRARY(_resolve_hidapi_target(name))
+
+    def _patched_cdll(name, *args, **kwargs):
+        return _ORIGINAL_CDLL(_resolve_hidapi_target(name), *args, **kwargs)
+
+    ctypes.cdll.LoadLibrary = _patched_cdll_loadlibrary
+    ctypes.CDLL = _patched_cdll
 
     try:
         if sys.platform == "win32":
