@@ -87,7 +87,6 @@ jobs:
           {
             echo "RELEASE_TAG=${RELEASE_TAG}"
             echo "LAUNCHER_MANIFEST_PATH=${MANIFEST_PATH}"
-            echo "PYINSTALLER_DLL_DIR=C:\\msys64\\mingw64\\bin"
             for var_name in "${required_vars[@]}"; do
               echo "${var_name}=${!var_name}"
             done
@@ -222,6 +221,41 @@ jobs:
             mingw-w64-x86_64-cairo
             mingw-w64-x86_64-hidapi
             mingw-w64-x86_64-libusb
+
+      - name: Resolve Windows DLL directory
+        run: |
+          set -euo pipefail
+
+          candidates=()
+          if [[ -n "${MINGW_PREFIX:-}" ]]; then
+            candidates+=("${MINGW_PREFIX}/bin")
+          fi
+          candidates+=(
+            "/d/a/_temp/msys64/mingw64/bin"
+            "/c/msys64/mingw64/bin"
+            "/c/msys64/ucrt64/bin"
+          )
+
+          dll_dir=""
+          for candidate in "${candidates[@]}"; do
+            if [[ -f "${candidate}/libhidapi-0.dll" || -f "${candidate}/libhidapi-libusb-0.dll" || -f "${candidate}/hidapi.dll" ]]; then
+              dll_dir="${candidate}"
+              break
+            fi
+          done
+
+          if [[ -z "${dll_dir}" ]]; then
+            echo "::error::Unable to locate HIDAPI runtime DLL directory"
+            for candidate in "${candidates[@]}"; do
+              echo "checked: ${candidate}"
+            done
+            exit 1
+          fi
+
+          dll_dir_win="$(cygpath -w "${dll_dir}")"
+          echo "PYINSTALLER_DLL_DIR=${dll_dir_win}" >> "${GITHUB_ENV}"
+          echo "Resolved Windows DLL dir: ${dll_dir_win}"
+          ls -1 "${dll_dir}"/libhidapi* "${dll_dir}"/hidapi* "${dll_dir}"/libusb-1.0.dll 2>/dev/null || true
 
       - name: Create build virtualenv
         working-directory: cockpitdecks
