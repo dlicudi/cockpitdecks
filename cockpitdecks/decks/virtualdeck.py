@@ -74,7 +74,7 @@ class VirtualDeck(DeckWithIcons):
         return self.clients > 0
 
     def is_connected(self) -> bool:
-        return self.cockpit.probe(self.name)
+        return self.cockpit.virtual_deck_connected(self.name)
 
     def unload_current_page(self):
         if self.current_page is not None:

@@ -2625,6 +2625,27 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
         logger.debug(f"{deck}: registration added ({len(self.vd_ws_conn[deck])})")
         logger.info(f"registered deck {deck}")
 
+    def _cleanup_virtual_deck_clients(self, deck: str) -> list:
+        client_list = self.vd_ws_conn.get(deck)
+        if client_list is None:
+            return []
+
+        active_clients = [ws for ws in client_list if not self.is_closed(ws)]
+        if len(active_clients) != len(client_list):
+            self.vd_ws_conn[deck] = active_clients
+
+        if len(active_clients) == 0:
+            self.handle_code(code=2, name=deck)
+            if deck in self.vd_ws_conn and len(self.vd_ws_conn[deck]) == 0:
+                del self.vd_ws_conn[deck]
+            logger.info(f"unregistered deck {deck}")
+            return []
+
+        return active_clients
+
+    def virtual_deck_connected(self, deck: str) -> bool:
+        return len(self._cleanup_virtual_deck_clients(deck)) > 0
+
     def is_closed(self, ws):
         try:
             # We first check if the socket appears closed from the environment
@@ -2669,13 +2690,10 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
 
     def send(self, deck, payload) -> bool:
         sent = False
-        client_list = self.vd_ws_conn.get(deck)
+        client_list = self._cleanup_virtual_deck_clients(deck)
         closed_ws = []
-        if client_list is not None:
+        if client_list:
             for ws in client_list:  # send to each instance of this deck connected to this websocket server
-                if self.is_closed(ws):
-                    closed_ws.append(ws)
-                    continue
                 try:
                     ws.send(json.dumps(payload))
                     logger.debug(f"sent for {deck}")
@@ -2687,6 +2705,11 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
                 for ws in closed_ws:
                     if ws in client_list:
                         client_list.remove(ws)
+                if len(client_list) == 0 and deck in self.vd_ws_conn:
+                    self.handle_code(code=2, name=deck)
+                    if deck in self.vd_ws_conn and len(self.vd_ws_conn[deck]) == 0:
+                        del self.vd_ws_conn[deck]
+                    logger.info(f"unregistered deck {deck}")
         else:
             if deck not in self.vd_errs:
                 logger.debug(f"no client for {deck}")  # warning
