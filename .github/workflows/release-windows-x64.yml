@@ -259,8 +259,6 @@ jobs:
 
       - name: Create build virtualenv
         working-directory: cockpitdecks
-        env:
-          PYINSTALLER_DLL_DIR: C:\msys64\mingw64\bin
         run: |
           python -m venv .venv
           . .venv/Scripts/activate
@@ -316,6 +314,48 @@ jobs:
               if not resolved.startswith(expected + os.sep):
                   raise SystemExit(f"{name} import is not local: {resolved} (expected under {expected})")
           PY
+
+      - name: Verify Windows HID runtime files
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${PYINSTALLER_DLL_DIR:-}" ]]; then
+            echo "::error::PYINSTALLER_DLL_DIR is not set"
+            exit 1
+          fi
+
+          dll_dir="$(cygpath "${PYINSTALLER_DLL_DIR}")"
+          echo "Verifying HID runtime files in ${dll_dir}"
+
+          shopt -s nullglob
+          hid_matches=(
+            "${dll_dir}"/libhidapi-libusb-0.dll
+            "${dll_dir}"/hidapi-libusb.dll
+            "${dll_dir}"/libhidapi-0.dll
+            "${dll_dir}"/hidapi.dll
+          )
+          libusb_matches=(
+            "${dll_dir}"/libusb-1.0.dll
+          )
+          shopt -u nullglob
+
+          if (( ${#hid_matches[@]} == 0 )); then
+            echo "::error::No HIDAPI runtime DLLs found in ${dll_dir}"
+            ls -la "${dll_dir}" | sed -n '1,200p'
+            exit 1
+          fi
+
+          if (( ${#libusb_matches[@]} == 0 )); then
+            echo "::error::libusb-1.0.dll not found in ${dll_dir}"
+            ls -la "${dll_dir}" | sed -n '1,200p'
+            exit 1
+          fi
+
+          printf 'HID DLLs:\n'
+          printf '  %s\n' "${hid_matches[@]}"
+          printf 'libusb DLLs:\n'
+          printf '  %s\n' "${libusb_matches[@]}"
 
       - name: Write build metadata
         working-directory: cockpitdecks
@@ -382,8 +422,6 @@ jobs:
 
       - name: Build launcher
         working-directory: cockpitdecks
-        env:
-          PYINSTALLER_DLL_DIR: C:\msys64\mingw64\bin
         run: scripts/build_launcher.sh
 
       - name: Verify launcher binary
