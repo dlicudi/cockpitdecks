@@ -445,7 +445,7 @@ class Aircraft:
         fn = os.path.abspath(os.path.join(self.acpath, CONFIG_FOLDER, RESOURCES_FOLDER, OBSERVABLES_FILE))
         if os.path.exists(fn):
             config = {}
-            with open(fn, "r") as fp:
+            with open(fn, "r", encoding="utf-8") as fp:
                 config = yaml.load(fp)
             self._observables = Observables(config=config, simulator=self.sim)
             names = []

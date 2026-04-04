@@ -421,7 +421,7 @@ class Simulator(ABC, InstructionFactory, InstructionPerformer, VariableFactory, 
         fn = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", RESOURCES_FOLDER, OBSERVABLES_FILE))
         if os.path.exists(fn):
             config = {}
-            with open(fn, "r") as fp:
+            with open(fn, "r", encoding="utf-8") as fp:
                 config = yaml.load(fp)
             self._observables = Observables(config=config, simulator=self)
             logger.info(f"loaded {len(self._observables.observables)} simulator observables")

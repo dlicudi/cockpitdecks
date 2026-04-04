@@ -724,7 +724,7 @@ def deck_designer():
     designer_config = {}
     designer_config_file = os.path.abspath(os.path.join(get_aircraft_home(), CONFIG_FOLDER, RESOURCES_FOLDER, DECKS_FOLDER, DESIGNER_CONFIG_FILE))
     if os.path.exists(designer_config_file):
-        with open(designer_config_file, "r") as fp:
+        with open(designer_config_file, "r", encoding="utf-8") as fp:
             designer_config = yaml.load(fp)
 
     return render_template("deck-designer.j2", deck=deck_config, designer_config=designer_config)
