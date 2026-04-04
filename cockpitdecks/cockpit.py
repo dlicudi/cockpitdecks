@@ -1893,7 +1893,7 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
             return
         if value != self.aircraft.icao:
             self.aircraft.icao = value
-            logger.info("✈ " * 3 + f"aircraft {self.aircraft.name}: icao set to {value}")
+            logger.info(". " * 3 + f"aircraft {self.aircraft.name}: icao set to {value}")
             if RELOAD_ON_ICAO_CHANGE:
                 logger.info("reloading..")
                 self.reload_decks()
@@ -1917,7 +1917,7 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
             return
 
         acname = Aircraft.get_aircraft_name_from_livery_path(value)
-        logger.info(f"✈ new livery path {value}, aircraft name {acname}, livery name {liveryname}")
+        logger.info(f"new livery path {value}, aircraft name {acname}, livery name {liveryname}")
 
         # 2. If we have a livery path, has the plane changed?
         if acname != self.aircraft.name:

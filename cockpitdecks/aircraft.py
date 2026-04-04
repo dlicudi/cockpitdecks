@@ -721,7 +721,7 @@ class Aircraft:
             self.terminate()
 
         a = f"starting aircraft {os.path.basename(acpath)}.. "
-        logger.info(a + "✈ " * (60 - len(a)))  # unicode ✈ (U+2708)
+        logger.info(a + ". " * (60 - len(a)))
         self.acpath = None
 
         # Note: Unfortunately, on first start, we cannot install a livery
@@ -775,7 +775,7 @@ class Aircraft:
             logger.debug("no aircraft running or aircraft not running, no termination necessary")
             if self.acpath is not None:
                 a = f"..aircraft {os.path.basename(self.acpath)} terminated "
-                logger.info(a + "✈ " * (60 - len(a)))
+                logger.info(a + ". " * (60 - len(a)))
             return
         logger.info("terminating aircraft..")
         logger.info("..terminating decks..")
@@ -798,7 +798,7 @@ class Aircraft:
         if len(nt) > 1:
             logger.info(f"{len(nt)} threads")
             logger.info(f"{[t.name for t in nt]}")
-        logger.info(f"..aircraft {os.path.basename(self.acpath)} terminated " + "✈ " * 30)
+        logger.info(f"..aircraft {os.path.basename(self.acpath)} terminated " + ". " * 30)
 
 
 # #################################################@
