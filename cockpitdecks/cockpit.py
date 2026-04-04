@@ -605,6 +605,7 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
 
         # Virtual/Web devices
         self.vd_ws_conn = {}
+        self._vd_send_locks = {}
         self.vd_errs = []
 
         # Global parameters that affect colors and deck LCD backlight
@@ -2620,6 +2621,7 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
     def register_deck(self, deck: str, websocket):
         if deck not in self.vd_ws_conn:
             self.vd_ws_conn[deck] = []
+            self._vd_send_locks[deck] = threading.Lock()
             logger.debug(f"{deck}: new registration")
         self.vd_ws_conn[deck].append(websocket)
         logger.debug(f"{deck}: registration added ({len(self.vd_ws_conn[deck])})")
@@ -2638,6 +2640,7 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
             self.handle_code(code=2, name=deck)
             if deck in self.vd_ws_conn and len(self.vd_ws_conn[deck]) == 0:
                 del self.vd_ws_conn[deck]
+            self._vd_send_locks.pop(deck, None)
             logger.info(f"unregistered deck {deck}")
             return []
 
@@ -2687,29 +2690,34 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
                 logger.info(f"unregistered deck {deck}")
         for deck in remove:
             del self.vd_ws_conn[deck]
+            self._vd_send_locks.pop(deck, None)
 
     def send(self, deck, payload) -> bool:
         sent = False
         client_list = self._cleanup_virtual_deck_clients(deck)
         closed_ws = []
         if client_list:
-            for ws in client_list:  # send to each instance of this deck connected to this websocket server
-                try:
-                    ws.send(json.dumps(payload))
-                    logger.debug(f"sent for {deck}")
-                    sent = True
-                except (OSError, Exception) as e:
-                    logger.warning(f"failed to send to {deck}: {e}")
-                    closed_ws.append(ws)
-            if len(closed_ws) > 0:
-                for ws in closed_ws:
-                    if ws in client_list:
-                        client_list.remove(ws)
-                if len(client_list) == 0 and deck in self.vd_ws_conn:
-                    self.handle_code(code=2, name=deck)
-                    if deck in self.vd_ws_conn and len(self.vd_ws_conn[deck]) == 0:
-                        del self.vd_ws_conn[deck]
-                    logger.info(f"unregistered deck {deck}")
+            send_lock = self._vd_send_locks.setdefault(deck, threading.Lock())
+            with send_lock:
+                message = json.dumps(payload)
+                for ws in list(client_list):  # send to each instance of this deck connected to this websocket server
+                    try:
+                        ws.send(message)
+                        logger.debug(f"sent for {deck}")
+                        sent = True
+                    except (OSError, Exception) as e:
+                        logger.warning(f"failed to send to {deck}: {e}")
+                        closed_ws.append(ws)
+                if len(closed_ws) > 0:
+                    for ws in closed_ws:
+                        if ws in client_list:
+                            client_list.remove(ws)
+                    if len(client_list) == 0 and deck in self.vd_ws_conn:
+                        self.handle_code(code=2, name=deck)
+                        if deck in self.vd_ws_conn and len(self.vd_ws_conn[deck]) == 0:
+                            del self.vd_ws_conn[deck]
+                        self._vd_send_locks.pop(deck, None)
+                        logger.info(f"unregistered deck {deck}")
         else:
             if deck not in self.vd_errs:
                 logger.debug(f"no client for {deck}")  # warning
