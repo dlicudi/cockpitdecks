@@ -93,7 +93,14 @@ class VirtualDeck(DeckWithIcons):
         logger.debug("..done")
 
     def disconnect(self):
-        self.unload_current_page()
+        if getattr(self, "_disconnecting", False):
+            logger.debug(f"deck {self.name}: disconnect re-entered, skipping")
+            return
+        self._disconnecting = True
+        try:
+            self.unload_current_page()
+        finally:
+            self._disconnecting = False
 
     def change_page(self, page: str | None = None) -> str | None:
         if self.has_clients():

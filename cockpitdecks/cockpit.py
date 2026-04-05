@@ -1360,7 +1360,7 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
         # no default-attribute
         # No attribute we return the default carried over so far
         if not is_default_attribute(attribute):
-            logger.warning(f"returning default value of non default attribute ({default})")
+            logger.warning(f"returning default value of non default attribute {attribute!r} ({default})")
 
         trace_debug(f"no value for {attribute}, returning default ({default})")
         return self.convert_if_color_attribute(attribute=attribute, value=default, silence=silence)
@@ -2695,13 +2695,13 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
             for ws in remove:
                 self.vd_ws_conn[deck].remove(ws)
         remove = []
-        for deck in self.vd_ws_conn:
-            if len(self.vd_ws_conn[deck]) == 0:
+        for deck in list(self.vd_ws_conn):
+            if len(self.vd_ws_conn.get(deck, [])) == 0:
                 self.handle_code(code=2, name=deck)
                 remove.append(deck)
                 logger.info(f"unregistered deck {deck}")
         for deck in remove:
-            del self.vd_ws_conn[deck]
+            self.vd_ws_conn.pop(deck, None)
             self._vd_send_locks.pop(deck, None)
 
     def send(self, deck, payload) -> bool:
