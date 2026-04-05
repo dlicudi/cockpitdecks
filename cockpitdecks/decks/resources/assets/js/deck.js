@@ -1,80 +1,46 @@
-/* Deck class and accessory content (buttons)
- * 
- * Draws button placeholders at their location.
- * Capture interaction in the button and send it to Cockpitdecks.
+/* Cockpitdecks web deck — Canvas 2D renderer (device-agnostic layout)
+ *
+ * Receives PIL-rendered PNG tiles from the server over WebSocket and blits
+ * them onto a plain <canvas> at computed positions — no hardware background
+ * image is used. Layout is derived from the deck-type-flat button metadata.
+ *
+ * Button groups (classified from metadata):
+ *   strips      — 'left' / 'right': tall image panels beside the main grid
+ *   gridBtns    — image tiles, push/swipe action, form the main NxM key grid
+ *   touchscreen — special wide image panel (Stream Deck +)
+ *   ledBtns     — colored-led feedback buttons, bottom row
+ *   encoders    — encoder+push, no image tile; receive wheel events only
  */
 
-// P A R A M E T E R S
-//
-// LOCAL GLOBALS (should not be changed)
-//
-const EDITOR_MODE = false
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 const PRESENTATION_DEFAULTS = "presentation-default"
 const ASSET_IMAGE_PATH = "/assets/images/"
 
-const DEFAULT_WIDTH = 200
-const DEFAULT_HEIGHT = 100
-const TITLE_BAR_HEIGHT = 24
+const PAD = 16   // outer canvas padding (px)
+const GAP = 4    // gap between buttons (px)
 
-const OPTIONS = "options"
-const OPT_CORNER_RADIUS = "corner_radius"
-const OPT_PUSHPULL = "pushpull"
-
-//
-// USER SETTABLE GLOBALS
-//
 const DEFAULT_USER_PREFERENCES = {
     highlight: "#ffffff10",
-    flash:  "#0f80ffb0",
-    flash_duration: 100 
+    flash:     "#0f80ffb0",
+    flash_duration: 100
 }
 
 var USER_PREFERENCES = DEFAULT_USER_PREFERENCES
 
 // Event codes
-//  0 = Push/press RELEASE
-//  1 = Push/press PRESS
-//  2 = Turned clockwise
-//  3 = Turned counter-clockwise
-//  4 = Pulled
-//  9 = Slider, event data contains value
-// 10 = Touch start, event data contains value
-// 11 = Touch end, event data contains value
-// 12 = Swipe, event data contains value
-// 14 = Tap, event data contains value
+//  0 = Release   1 = Press    2 = CW   3 = CCW
+//  4 = Pull      9 = Slider  10 = Touch start
+// 11 = Touch end 14 = Tap
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-// Uses:
-// sendEvent(deck, key, event, data)
-
-// https://stackoverflow.com/questions/2631001/test-for-existence-of-nested-javascript-object-key
-function checkNested(obj /*, level1, level2, ... levelN*/) {
-    var args = Array.prototype.slice.call(arguments, 1);
-
-    for (var i = 0; i < args.length; i++) {
-        if (!obj || !obj.hasOwnProperty(args[i])) {
-            return false;
-        }
-        obj = obj[args[i]];
-    }
-    return true;
-}
-
-function getNested(obj, ...args) {
-  return args.reduce((obj, level) => obj && obj[level], obj)
-}
-
-// Cache small pointers
 function toDataUrl(url, callback) {
     var xhr = new XMLHttpRequest();
     xhr.onload = function() {
         var reader = new FileReader();
-        reader.onloadend = function() {
-            callback(reader.result);
-        }
+        reader.onloadend = function() { callback(reader.result); };
         reader.readAsDataURL(xhr.response);
-        // console.log(url, xhr.response)
     };
     xhr.open('GET', url);
     xhr.responseType = 'blob';
@@ -82,9 +48,9 @@ function toDataUrl(url, callback) {
 }
 
 var POINTERS = {};
-["push", "pull", "clockwise", "counter-clockwise"].forEach( (url) => {
-    toDataUrl(ASSET_IMAGE_PATH+url+".svg", function(base64url) {
-        POINTERS[url.replace("-", "")] = base64url;
+["push","pull","clockwise","counter-clockwise"].forEach(function(name) {
+    toDataUrl(ASSET_IMAGE_PATH + name + ".svg", function(b64) {
+        POINTERS[name.replace("-","")] = b64;
     });
 });
 
@@ -92,1023 +58,513 @@ var Sound = (function () {
     var df = document.createDocumentFragment();
     return function Sound(src) {
         var snd = new Audio(src);
-        df.appendChild(snd); // keep in fragment until finished playing
-        snd.addEventListener('ended', function () {df.removeChild(snd);});
+        df.appendChild(snd);
+        snd.addEventListener('ended', function() { df.removeChild(snd); });
         snd.play();
         return snd;
-    }
+    };
 }());
 
-// B U T T O N S
-//
-// Key
-// Simple key to press, square, with optional rounded corners.
-//
-class Key extends Konva.Rect {
-    // Represent a simply rectangular key
+// ─── LiveDeck — Canvas 2D deck renderer ───────────────────────────────────────
 
-    constructor(config, container) {
+class LiveDeck {
 
-        let corner_radius = 0
-        if (checkNested(config, OPTIONS, OPT_CORNER_RADIUS)) {
-            corner_radius = parseInt(config.options[OPT_CORNER_RADIUS])
-        }
+    constructor(canvas, config) {
+        this.canvas   = canvas;
+        this.ctx      = canvas.getContext('2d');
+        this.config   = config;
+        this.deckType = config['deck-type-flat'];
+        this.name     = config.name;
 
-        super({
-            x: config.position[0],
-            y: config.position[1],
-            width: config.dimension[0],
-            height: config.dimension[1],
-            cornerRadius: corner_radius,
-            stroke: USER_PREFERENCES.highlight,
-            strokeWidth: 1,
-            draggable: EDITOR_MODE
-        });
-
-        this.config = config
-        this.name = config.name
-        this.container = container
-
-        this.down = false
-
-        // Hover
-        this.on("pointerover", function () {
-            if (this.down) {
-                this.stroke(FLASH)
-            }
-            this.container.style.cursor = "pointer"
-        });
-
-        this.on("pointerout", function () {
-            this.down = false
-            this.stroke(USER_PREFERENCES.highlight)
-            this.container.style.cursor = "auto"
-        });
-
-        // Clicks
-        this.on("pointerdown", function () {
-            this.down = true
-            this.stroke(USER_PREFERENCES.flash)
-            const pos = this.getRelativePointerCoordinates();
-            sendEvent(DECK.name, this.name, 1, {x: pos.x, y: pos.y, ts: Date.now()})
-        });
-
-        this.on("pointerup", function () {
-            this.down = false
-            this.stroke(USER_PREFERENCES.highlight)
-            const pos = this.getRelativePointerCoordinates();
-            sendEvent(DECK.name, this.name, 0, {x: pos.x, y: pos.y, ts: Date.now()})
-        });
-
-    }
-
-    flash(colorin, colorout) {
-        let that = this
-        this.stroke(colorin)
-        setTimeout(function() {
-            that.stroke(colorout)
-        }, USER_PREFERENCES.flash_duration)
-    }
-
-    add_to_layer(layer) {
-        this.layer = layer;
-        layer.add(this);
-    }
-
-    save() {
-        const code = {
-            type: "key",
-            name: this.name,
-            x: this.x(),
-            y: this.y(),
-            width: this.width(),
-            height: this.height(),
-            corner_radius: this.cornerRadius()
-        };
-        return code;
-    }
-
-    getRelativePointerCoordinates() {
-        return {
-            x: this.layer.getRelativePointerPosition().x - this.x(), 
-            y: this.layer.getRelativePointerPosition().y - this.y()
-        }
-    }
-
-}
-
-// KeyRound
-// Simple key to press but round.
-//
-class KeyRound extends Konva.Circle {
-    // Represent a simply rectangular key
-
-    constructor(config, container) {
-        super({
-            x: config.position[0],
-            y: config.position[1],
-            radius: config.dimension, // only one value
-            stroke: USER_PREFERENCES.highlight,
-            strokeWidth: 1,
-            draggable: EDITOR_MODE
-        });
-
-        this.config = config
-        this.name = config.name
-        this.container = container
-
-        this.down = false
-
-        // Hover
-        this.on("pointerover", function () {
-            if (this.down) {
-                this.stroke(USER_PREFERENCES.flash)
-            }
-            this.container.style.cursor = "pointer"
-        });
-
-        this.on("pointerout", function () {
-            this.down = false
-            this.stroke(USER_PREFERENCES.highlight)
-            this.container.style.cursor = "auto"
-        });
-
-        // Clicks
-        this.on("pointerdown", function () {
-            this.down = true
-            this.stroke(USER_PREFERENCES.flash)
-            const pos = this.getRelativePointerCoordinates();
-            sendEvent(DECK.name, this.name, 1, {x: pos.x, y: pos.y, ts: Date.now()})
-        });
-
-        this.on("pointerup", function () {
-            this.down = false
-            this.stroke(USER_PREFERENCES.highlight)
-            const pos = this.getRelativePointerCoordinates();
-            sendEvent(DECK.name, this.name, 0, {x: pos.x, y: pos.y, ts: Date.now()})
-        });
-
-    }
-
-    flash(colorin, colorout, time) {
-        let that = this
-        this.stroke(colorin)
-        setTimeout(function() {
-            that.stroke(colorout)
-        }, time)
-    }
-
-    add_to_layer(layer) {
-        this.layer = layer;
-        layer.add(this);
-    }
-
-    save() {
-        const code = {
-            type: "keyr",
-            name: this.name,
-            x: this.x(),
-            y: this.y(),
-        };
-        return code;
-    }
-
-    getRelativePointerCoordinates() {
-        return {
-            x: this.layer.getRelativePointerPosition().x - this.x(), 
-            y: this.layer.getRelativePointerPosition().y - this.y()
-        }
-    }
-}
-
-// Encoder
-// Round encoder knob.
-//
-class Encoder extends Konva.Circle {
-
-    constructor(config, container) {
-        super({
-            x: config.position[0],
-            y: config.position[1],
-            radius: config.dimension, // only one value
-            stroke: USER_PREFERENCES.highlight,
-            strokeWidth: 1,
-            draggable: EDITOR_MODE
-        });
-
-        // console.log("user prefs", USER_PREFERENCES)
-
-        this.config = config
-        this.name = config.name
-        this.container = container
-
-        // Encoder button has optional push/pull behavior like Airbus FCU. Wow.
-        this.pushpull = false
-        if (checkNested(config, OPTIONS, OPT_PUSHPULL)) {
-            this.pushpull = config.options.pushpull
-        }
-
-        this.down = false
-
-        // Hover
-        this.on("pointerout", function () {
-            this.down = false
-            this.stroke(USER_PREFERENCES.highlight)
-            this.container.style.cursor = "auto"
-        });
-
-        this.on("pointermove", function () {
-            if (this.down) {
-                this.stroke(USER_PREFERENCES.flash)
-            }
-            switch (this.value()) { // SVG cursor origin is on middle top
-            case 1:
-                this.container.style.cursor = "url('"+POINTERS.push+"') 12 0, pointer";
-                break;
-            case 4:
-                this.container.style.cursor = "url('"+POINTERS.pull+"') 12 0, pointer";
-                break;
-            case 2:
-                this.container.style.cursor = "url('"+POINTERS.clockwise+"') 12 0, pointer";
-                break;
-            case 3:
-                this.container.style.cursor = "url('"+POINTERS.counterclockwise+"') 12 0, pointer";
-                break;
-            }
-        });
-
-        // Clicks
-        this.on("pointerdown", function () {
-            this.down = true
-            this.stroke(USER_PREFERENCES.flash)
-            const pos = this.getRelativePointerCoordinates();
-            // const pos2 = this.layer.getRelativePointerPosition() // , mx: pos2.x, my: pos2.y, cx: this.x(), cy: this.y()
-            sendEvent(DECK.name, this.name, this.value(), {x: pos.x, y: pos.y, ts: Date.now()});
-        });
-
-        this.on("pointerup", function () {
-            this.down = false
-            this.stroke(USER_PREFERENCES.highlight)
-            // sendEvent(DECK.name, this.name, 0, {x: 0, y: 0})
-        });
-
-        this.on("wheel", function (e) {
-            const step = 4
-            const pos = this.getRelativePointerCoordinates(); // unused, but supplied...
-            // console.log("wheel", e, e.evt.deltaY)
-            if (e.evt.deltaY > step) {
-                // console.log("up")
-                sendEvent(DECK.name, this.name, 2, {x: pos.x, y: pos.y, ts: Date.now()});
-            } else if (e.evt.deltaY < (- step)) {
-                // console.log("down")
-                sendEvent(DECK.name, this.name, 3, {x: pos.x, y: pos.y, ts: Date.now()});
-            }
-        });
-
-    }
-
-    value() {
-        // How encoder was turned, pressed, or optionally pulled. Wow.
-        const w = Math.floor(this.radius() / 2)
-        if ( this.layer.getRelativePointerPosition().x < (this.x()-w)) {
-            return 2
-        } else if ( this.layer.getRelativePointerPosition().x > (this.x()+w)) {
-            return 3
-        } else if ( this.pushpull && this.layer.getRelativePointerPosition().y < this.y()) {
-            return 4
-        } else {
-            return 1
-        }
-    }
-
-    value2(pos) {
-        // How encoder was turned, pressed, or optionally pulled. Wow.
-        const w = Math.floor(this.radius() / 2)
-        if ( pos.x < -w) {
-            return 2 // rotate CW
-        } else if ( pos.x > w) {
-            return 3 // rotate CCW
-        } else if ( this.pushpull && pos.y < 0) {
-            return 4 // pulled, if capable
-        } else {
-            return 1 // pushed, pressed
-        }
-    }
-
-    flash(colorin, colorout, time) {
-        let that = this
-        this.stroke(colorin)
-        setTimeout(function() {
-            that.stroke(colorout)
-        }, time)
-    }
-
-    add_to_layer(layer) {
-        this.layer = layer;
-        // layer.add(new Konva.Rect({
-        //     x: 0,
-        //     y: 0,
-        //     width: 10,
-        //     height: 10,
-        //     stroke: "yellow",
-        //     strokeWidth: 1,
-        // }));
-        // layer.add(new Konva.Rect({
-        //     x: this.config.position[0],
-        //     y: this.config.position[1],
-        //     width: 48,
-        //     height: 48,
-        //     stroke: "red",
-        //     strokeWidth: 1,
-        // }));
-        layer.add(this);
-    }
-
-    save() {
-        const code = {
-            type: "encoder",
-            name: this.name,
-            x: this.x(),
-            y: this.y(),
-            radius: this.radius()
-        };
-        return code;
-    }
-
-    getRelativePointerCoordinates() {
-        return {
-            x: this.layer.getRelativePointerPosition().x - this.x(),
-            y: this.layer.getRelativePointerPosition().y - this.y()
-        }
-    }
-}
-
-// Touchscreen
-// Rectangular touch screen
-//
-class Touchscreen extends Konva.Rect {
-
-    constructor(config, container) {
-
-        let corner_radius = 0
-        if (checkNested(config, OPTIONS, OPT_CORNER_RADIUS)) {
-            corner_radius = parseInt(config.options[OPT_CORNER_RADIUS])
-        }
-
-        super({
-            x: config.position[0],
-            y: config.position[1],
-            width: config.dimension[0],
-            height: config.dimension[1],
-            cornerRadius: corner_radius,
-            stroke: USER_PREFERENCES.highlight,
-            strokeWidth: 1,
-            draggable: EDITOR_MODE
-        });
-
-        this.config = config
-        this.name = config.name
-        this.container = container
-
-        this.sliding = false
-        this.pressed = false
-
-        // Inside key
-        this.on("pointerover", function () {
-            this.container.style.cursor = "pointer"
-        });
-
-        this.on("pointerout", function () {
-            this.container.style.cursor = "auto"
-        });
-
-        // Pointer events: 
-        this.on("pointerdown", function () {
-            this.container.style.cursor = "grab"
-            this.pressed = true
-            const pos = this.getRelativePointerCoordinates();
-            // console.log("pointerdown", pos, Date.now());
-        });
-
-        this.on("pointermove", function () {
-            if (this.pressed && ! this.sliding) { // sliding start
-                const pos = this.getRelativePointerCoordinates();
-                this.sliding = true
-                this.container.style.cursor = "grabbing"
-                // console.log("touchstart/pointermove", pos, Date.now());
-                sendEvent(DECK.name, this.name, 10, {x: pos.x, y: pos.y, ts: Date.now()});
-            }
-        });
-
-        this.on("pointerup", function () {
-            this.pressed = false
-            if (! this.sliding) {
-                const pos = this.getRelativePointerCoordinates();
-                this.flash(USER_PREFERENCES.flash, USER_PREFERENCES.highlight, USER_PREFERENCES.flash_duration)
-                // console.log("tap/pointerup", pos, Date.now());
-                sendEvent(DECK.name, this.name, 14, {x: pos.x, y: pos.y, ts: Date.now()});
-            } else {
-                const pos = this.getRelativePointerCoordinates();
-                this.sliding = false
-                this.container.style.cursor = "pointer"
-                // console.log("touchend/pointerdown", pos, Date.now());
-                sendEvent(DECK.name, this.name, 11, {x: pos.x, y: pos.y, ts: Date.now()});
-            }
-        });
-
-        // Touch events: touchstart, touchmove, touchend, tap
-        this.on("tap", function () {
-            const pos = this.getRelativePointerCoordinates();
-            this.flash(USER_PREFERENCES.flash, USER_PREFERENCES.highlight, USER_PREFERENCES.flash_duration);
-            // console.log("tap", pos, Date.now());
-            sendEvent(DECK.name, this.name, 1, {x: pos.x, y: pos.y, ts: Date.now()});
-        });
-
-        this.on("touchmove", function () {
-            this.container.style.cursor = "grabbing";
-        });
-
-        this.on("touchstart", function () {
-            this.container.style.cursor = "grab";
-            const pos = this.getRelativePointerCoordinates();
-            // console.log("touchstart", pos, Date.now());
-            sendEvent(DECK.name, this.name, 10, {x: pos.x, y: pos.y, ts: Date.now()});
-        });
-
-        this.on("touchend", function () {
-            this.container.style.cursor = "pointer";
-            const pos = this.getRelativePointerCoordinates();
-            // console.log("touchend", pos, Date.now());
-            sendEvent(DECK.name, this.name, 11, {x: pos.x, y: pos.y, ts: Date.now()});
-        });
-
-    }
-
-    flash(colorin, colorout, time) {
-        let that = this;
-        this.stroke(colorin)
-        setTimeout(function() {
-            that.stroke(colorout)
-        }, time)
-    }
-
-    add_to_layer(layer) {
-        this.layer = layer;
-        layer.add(this);
-    }
-
-    getRelativePointerCoordinates() {
-        return {
-            x: this.layer.getRelativePointerPosition().x - this.x(), 
-            y: this.layer.getRelativePointerPosition().y - this.y()
-        }
-    }
-
-    save() {
-        const code = {
-            type: "touchscreen",
-            name: this.name,
-            x: this.x(),
-            y: this.y(),
-            width: this.width(),
-            height: this.height(),
-            corner_radius: this.cornerRadius()
-        };
-        return code;
-    }
-}
-
-// Slider (Cursor)
-// Can be horizontal or vertical
-// Currently only send value on drag start and end
-// to limit the amount of events.
-// A Slider consists of a ramp (Slider) and a moving cursor (SliderHandle).
-//
-class SliderHandle extends Konva.Rect {
-
-    constructor(config, container) {
-
-        const x = config.position[0] + config.dimension[0] / 2 - config.handle[0]/2
-        const y = config.position[1] + config.dimension[1] / 2 - config.handle[1]/2
-        super({
-            x: x,
-            y: y,
-            width: config.handle[0],
-            height: config.handle[1],
-            cornerRadius: config.handle[2] != undefined ? config.handle[2] : 4,
-            fill: "lightgrey",
-            draggable: true
-        });
-
-        this.config = config
-        this.name = config.name
-        this.container = container
-
-        this.horizontal = config.dimension[0] > config.dimension[1]
-        this.invert = true
-
-        const c = this.horizontal ? 0 : 1
-        const c2 = this.horizontal ? 1 : 0
-        this.cmin = config.position[c] + 2  // max pos of mouse
-        this.cmax = config.position[c] + config.dimension[c] - 2
-        this.pmin = config.position[c] - config.handle[c] / 2 + 1  // pos of handle at min or max
-        this.pmax = config.position[c] + config.dimension[c] - config.handle[c] / 2 - 1
-        this.crange = config.dimension[c]
-        this.range = config.range
-
-        this.middle = x
-        this.pressed = false
-
-        // Inside key
-        this.on("pointerover", function () {
-            this.container.style.cursor = "ns-resize"
-        });
-
-        this.on("pointerout", function () {
-            this.container.style.cursor = "auto"
-        });
-
-        // Slider drag events:
-        this.on("dragbegin", function () {
-            const pos = this.layer.getRelativePointerPosition();
-            this.constraint(pos)
-            // console.log("cursor/dragbegin", this.value(pos), Date.now());
-            sendEvent(DECK.name, this.name, 9, {x: pos.x, y: pos.y, value: this.value(pos), ts: Date.now()});
-        });
-
-        this.on("dragmove", function () {
-            const pos = this.layer.getRelativePointerPosition();
-            this.constraint(pos)
-            // console.log("cursor/dragmove", this.value(pos), Date.now());
-            // sendEvent(DECK.name, this.name, 9, {x: pos.x, y: pos.y, value: this.value(pos), ts: Date.now()});
-        });
-
-        this.on("dragend", function () {
-            this.pressed = false
-            this.container.style.cursor = "ns-resize"
-            const pos = this.layer.getRelativePointerPosition();
-            this.constraint(pos)
-            // console.log("cursor/dragend", this.value(pos), Date.now());
-            sendEvent(DECK.name, this.name, 9, {x: pos.x, y: pos.y, value: this.value(pos), ts: Date.now()});
-        });
-
-    }
-
-    add_to_layer(layer) {
-        this.layer = layer;
-        layer.add(this);
-    }
-
-    value(pos) {
-        var value = this.horizontal ? pos.x : pos.y
-        value = value - this.cmin
-        if (value < 0) {
-            value = 0
-        } else if (value > this.crange) {
-            value = this.crange
-        }
-        if (this.invert) {
-            value = this.crange - value
-        }
-        const fraction = value / this.crange
-        const range = (this.range[1] - this.range[0])
-        const result = this.range[0] + Math.round( fraction * range )
-        return result
-    }
-
-    constraint(pos) {
-        if (this.horizontal) {
-            ;
-        } else {
-            this.x(this.middle)
-            if (pos.y < this.cmin) {
-                this.y(this.pmin)
-            }
-            if (pos.y > this.cmax) {
-                this.y(this.pmax)
-            }
-        }
-    }
-}
-
-
-class Slider extends Konva.Rect {
-
-    constructor(config, container) {
-
-        let corner_radius = 0
-        if (checkNested(config, OPTIONS, OPT_CORNER_RADIUS)) {
-            corner_radius = parseInt(config.options[OPT_CORNER_RADIUS])
-        }
-
-        super({
-            x: config.position[0],
-            y: config.position[1],
-            width: config.dimension[0],
-            height: config.dimension[1],
-            cornerRadius: corner_radius,
-            stroke: USER_PREFERENCES.highlight,
-            strokeWidth: 1,
-            draggable: EDITOR_MODE
-        });
-
-        this.config = config
-        this.name = config.name
-        this.container = container
-
-        this.handle = new SliderHandle(config, container)
-    }
-
-    add_to_layer(layer) {
-        this.layer = layer;
-        layer.add(this);
-        this.handle.add_to_layer(layer)
-    }
-
-    save() {
-        // to be corrected for handle
-        const code = {
-            type: "slider",
-            name: this.name,
-            x: this.x(),
-            y: this.y(),
-            width: this.width(),
-            height: this.height(),
-            corner_radius: this.cornerRadius()
-        };
-        return code;
-    }
-}
-
-//
-//
-//
-class LED extends Konva.Rect {
-    // Represent a simply rectangular led, no activation, just display
-
-    constructor(config, container) {
-
-        let corner_radius = 0
-        if (checkNested(config, OPTIONS, OPT_CORNER_RADIUS)) {
-            corner_radius = parseInt(config.options[OPT_CORNER_RADIUS])
-        }
-
-        super({
-            x: config.position[0],
-            y: config.position[1],
-            width: config.dimension[0],
-            height: config.dimension[1],
-            cornerRadius: corner_radius,
-            stroke: USER_PREFERENCES.highlight,
-            strokeWidth: 1,
-            draggable: EDITOR_MODE
-        });
-
-        this.config = config
-        this.name = config.name
-        this.container = container
-    }
-
-    add_to_layer(layer) {
-        this.layer = layer;
-        layer.add(this);
-    }
-
-    save() {
-        const code = {
-            type: "led",
-            name: this.name,
-            x: this.x(),
-            y: this.y(),
-            width: this.width(),
-            height: this.height(),
-            corner_radius: this.cornerRadius()
-        };
-        return code;
-    }
-}
-
-class Screen extends Konva.Rect {
-    // Represent a simply rectangular display area
-
-    constructor(config, container) {
-
-        let corner_radius = 0
-        if (checkNested(config, OPTIONS, OPT_CORNER_RADIUS)) {
-            corner_radius = parseInt(config.options[OPT_CORNER_RADIUS])
-        }
-
-        super({
-            x: config.position[0],
-            y: config.position[1],
-            width: config.dimension[0],
-            height: config.dimension[1],
-            cornerRadius: corner_radius,
-            stroke: USER_PREFERENCES.highlight,
-            strokeWidth: 1,
-            draggable: EDITOR_MODE
-        });
-
-        this.config = config
-        this.name = config.name
-        this.container = container
-
-    }
-
-    add_to_layer(layer) {
-        this.layer = layer;
-        layer.add(this);
-    }
-
-    save() {
-        const code = {
-            type: "screen",
-            name: this.name,
-            x: this.x(),
-            y: this.y(),
-            width: this.width(),
-            height: this.height(),
-            corner_radius: this.cornerRadius()
-        };
-        return code;
-    }
-
-}
-//
-//
-//
-class Overlay {  // later, idea: overlay text or image on top of background (logo, etc.)
-
-    constructor(config, container) {
-        this.config = config
-        this.container = container
-    }
-
-    add_to_layer(layer) {
-        this.layer = layer;
-        layer.add(this);
-    }
-
-}
-
-// D E C K
-//
-//
-class Deck {
-
-    constructor(config, stage) {
-        console.log("deck config", config)
-
-        this._config = config;
-        this._stage = stage
-
-        this.deck_type = config[DECK_TYPE_DESCRIPTION];
         USER_PREFERENCES = Object.assign({}, DEFAULT_USER_PREFERENCES, config[PRESENTATION_DEFAULTS]);
-        console.log("user preferences", USER_PREFERENCES)
 
-        this.name = config.name;
-        this.container = stage.container();
-
+        // Index button descriptors by name
         this.buttons = {};
-        this.key_images = {};
+        (this.deckType.buttons || []).forEach(btn => { this.buttons[btn.name] = btn; });
 
-        this.build();
+        // Received images (key → HTMLImageElement)
+        this._images = {};
+
+        // Background colour from deck type (fallback dark)
+        this._bgColor = this.deckType.background?.color || '#1c1c1c';
+
+        // Computed layout: key → {x, y, w, h}
+        this._layout   = {};
+        // Encoder hit zones for wheel events: [{name, x, y, w, h}, …]
+        this._encZones = [];
+
+        this._pressing       = null;
+        this._sliding        = false;
+        this._sliderDragging = null;
+
+        this._computeLayout();
+        this._setupEvents();
     }
 
-    //
-    // Installation of layers
-    //
-    set_background_layer(layer) {
-        // Add bacground image and resize deck around it.
-        var stage = this._stage;
-        var that = this;
+    // ── Public API ─────────────────────────────────────────────────────────────
 
-        function set_default_size(container, sizes, color) {
-            container.style["border"] = "1px solid "+color;
-            const width = sizes == undefined || (sizes.constructor != Array) ? DEFAULT_WIDTH : sizes[0];
-            const height = sizes == undefined || (sizes.constructor != Array) ? DEFAULT_HEIGHT : sizes[1];
-            stage.width(width);
-            stage.height(height);
-            if (typeof window.cockpitdecksSetDeckSize === "function") {
-                window.cockpitdecksSetDeckSize(width, height);
-            } else {
-                container.style.width = width + "px";
-                container.style.height = height + "px";
-            }
-            console.log("set_default_size", width, height);
-        }
-
-        this.background_layer = layer
-        this.background_node = null
-
-        const background = this.deck_type.background
-        if (background == undefined || background == null) {
-            console.log("no background", this.deck_type);
-            set_default_size(this.container, [DEFAULT_WIDTH, DEFAULT_HEIGHT], "red");
-            return;
-        }
-
-        const sizes = background.size
-
-        const bgcolor = background.color
-        if (bgcolor != undefined) {
-            this.container.style["background-color"] = "var(--deck-background-color)";
-        }
-
-        const background_image = background.image;
-        if (background_image == undefined || background_image == null) {
-            console.log("no background image", this.deck_type);
-            set_default_size(this.container, sizes, "orange");
-            return;
-        }
-
-        // this loads the image and sets the size of the window to the size of the image
-        // if the image loading fails, the suplied background size is set (if available
-        // otherwise a default value is used.)
-        this._set_default_size = set_default_size
-        this._background_sizes = sizes
-        this.set_background_image(BACKGROUND_IMAGE_PATH, bgcolor);
-    }
-
-    set_background_image(image_url, fallback_color) {
-        const stage = this._stage;
-        const that = this;
-        const sizes = this._background_sizes;
-        if (fallback_color != undefined) {
-            this.container.style["background-color"] = fallback_color;
-        }
-        let deckImage = new Image();
-        deckImage.onerror = function() {
-            console.log("deckImage.onerror: background image not found", image_url);
-            that.background_layer.destroyChildren();
-            that.background_layer.draw();
-            that._set_default_size(that.container, sizes, "red");
-        }
-        deckImage.onload = function () {
-            let deckbg = new Konva.Image({
-                x: 0,
-                y: 0,
-                image: deckImage
-            });
-            stage.width(deckImage.naturalWidth);
-            stage.height(deckImage.naturalHeight);
-            if (typeof window.cockpitdecksSetDeckSize === "function") {
-                window.cockpitdecksSetDeckSize(deckImage.naturalWidth, deckImage.naturalHeight);
-            } else {
-                that.container.style.width = deckImage.naturalWidth + "px";
-                that.container.style.height = deckImage.naturalHeight + "px";
-            }
-            console.log("deckImage.onload", deckImage.naturalWidth, deckImage.naturalHeight);
-            that.background_layer.destroyChildren();
-            that.background_layer.add(deckbg);
-            that.background_node = deckbg;
-            that.background_layer.draw();
+    set_key_image(key, base64jpeg) {
+        const img = new Image();
+        img.onload = () => {
+            this._images[key] = img;
+            this._blitButton(key);
         };
-        deckImage.src = image_url;
+        img.src = 'data:image/jpeg;base64,' + base64jpeg;
     }
 
-    set_hardware_image_layer(layer) {
-        this.hardware_layer = layer
-        // console.log("set_hardware_image_layer", this.buttons)
-    }
-
-    set_interaction_layer(layer) {
-        this.interaction_layer = layer
-        for (let name in this.buttons) {
-            if(this.buttons.hasOwnProperty(name)) {
-                this.buttons[name].add_to_layer(layer);
-            }
+    /** Hardware background image is not used — just accept the colour hint. */
+    set_background_image(imageUrl, fallbackColor) {
+        if (fallbackColor && fallbackColor !== this._bgColor) {
+            this._bgColor = fallbackColor;
+            this._redrawAll();
         }
-        // console.log("set_interaction_layer", this.buttons)
-    }
-
-    set_image_layer(layer) {
-        this.image_layer = layer;
-        // console.log("set_image_layer", this.buttons)
-    }
-
-    //
-    // Building deck from buttons
-    //
-    build() {
-        this.deck_type.buttons.forEach((button) => {
-            // decide which shape to use
-            // shape selected here will be an interactor only
-
-            if (button.actions.indexOf("encoder") > -1) {
-                // console.log("encoder", button)
-                this.add(new Encoder(button, this.container))
-
-            } else if (button.actions.indexOf("push") > -1 && button.actions.indexOf("encoder") == -1) {
-
-                if (button.dimension != undefined && button.dimension.constructor == Array) {
-                    // console.log("key", button)
-                    this.add(new Key(button, this.container))
-
-                } else {
-                    // console.log("keyround", button)
-                    this.add(new KeyRound(button, this.container))
-                }
-
-            } else if (button.actions.indexOf("swipe") > -1) {
-                // console.log("touchscreen", button)
-                this.add(new Touchscreen(button, this.container))
-
-            } else if (button.actions.indexOf("cursor") > -1) {
-                // console.log("slider", button)
-                this.add(new Slider(button, this.container))
-
-            } else if (button.actions.length == 0 && button.feedbacks.indexOf("led") > -1) {
-                // console.log("led", button)
-                this.add(new LED(button, this.container))
-
-            } else if (button.actions.length == 0 && button.feedbacks.indexOf("image") > -1) {
-                // console.log("screen", button)
-                this.add(new Screen(button, this.container))
-
-            } else {
-                console.log("not building", button)
-            }
-        });
-    }
-
-    add(button) {
-        // button.addName(button.name)
-        this.buttons[button.name] = button
-    }
-
-    get_xy(key) {
-        const shape = this.buttons[key]
-        if (shape != undefined && shape != null) {
-            // console.log("get_xy", key, shape.x(), shape.y());
-            return {"x": shape.x(), "y": shape.y()}
-        }
-        console.log("get_xy no shape", key, shape);
-        return {"x": 0, "y": 0};
-    }
-
-    get_hardware_image_offset(key) {
-        // Empirically try to guess if this is a hardware image.
-        // If it is, and if its dimension is a scalar value (= radius)
-        // we have to offset the image since it is center.
-        const key_def = this.buttons[key];
-        if (key_def != undefined) {
-            if (checkNested(key_def.config, "layout", "hardware", "type")) {
-                if (key_def.config.dimension != undefined && key_def.config.dimension.constructor == Number) {
-                    const radius = key_def.radius()
-                    return {x: -radius, y: -radius}
-                }
-            }
-        } else {
-            console.log("could not find key", key)
-        }
-        return 
-    }
-
-    set_key_image(key, image) {
-        var offset = {x: 0, y: 0}
-        const shape = this.buttons[key]
-        if (shape == undefined || shape == null) {
-            console.log("no shape", key);
-            return ;
-        }
-        // if (checkNested(shape.config, "layout", "hardware", "type")) {
-        //     if (shape.config.dimension != undefined && shape.config.dimension.constructor == Number) {
-        //         offset = {x: -shape.radius(), y: -shape.radius()}
-        //     }
-        // } else if (shape.config.dimension != undefined && shape.config.dimension.constructor == Number) {
-        //     // THIS MUST BE CHECKED
-        //     console.log("offset", shape.name, shape.radius())
-        //     offset = {x: -shape.radius(), y: -shape.radius()}
-        // }
-        if (shape.config.dimension != undefined && shape.config.dimension.constructor == Number) {
-            console.log("offset", shape.name, shape.radius())
-            offset = {x: -shape.radius(), y: -shape.radius()}
-        }
-        var that = this
-        let buttonImage = new Image();
-        buttonImage.onload = function () {
-            let button = new Konva.Image({
-                x: shape.x() + offset.x,
-                y: shape.y() + offset.y,
-                image: buttonImage
-            });
-            if (that.key_images[key] != undefined) { // remove old version
-                that.key_images[key].destroy()
-            }
-            that.image_layer.add(button);
-            that.key_images[key] = button
-        };
-        buttonImage.src = "data:image/jpeg;base64," + image;
     }
 
     play_sound(sound, type) {
-        console.log("sound", "data:audio/"+type+";base64,")
-        var snd = Sound("data:audio/"+type+";base64," + sound);
+        Sound('data:audio/' + type + ';base64,' + sound);
     }
 
-    save() {
-        const buttons = this.buttons.reduce((acc, val) => acc.push(val), Array());
-        console.log(buttons);
+    // ── Layout computation ─────────────────────────────────────────────────────
+
+    _computeLayout() {
+        const allBtns = Object.values(this.buttons);
+
+        // ── Classify ──────────────────────────────────────────────────────────
+        const strips      = {};   // 'left' / 'right' → btn
+        let   touchscreen = null;
+        const gridBtns    = [];
+        const encoders    = [];
+        const ledBtns     = [];
+
+        for (const btn of allBtns) {
+            const acts = btn.actions  || [];
+            const fbs  = btn.feedbacks || [];
+            const isEnc   = acts.includes('encoder');
+            const hasImg  = fbs.includes('image');
+            const hasLed  = fbs.includes('colored-led');
+
+            if (isEnc) {
+                encoders.push(btn);
+            } else if (btn.name === 'left' || btn.name === 'right') {
+                strips[btn.name] = btn;
+            } else if (btn.name === 'touchscreen') {
+                touchscreen = btn;
+            } else if (hasImg) {
+                gridBtns.push(btn);
+            } else if (hasLed || acts.includes('push')) {
+                ledBtns.push(btn);
+            }
+        }
+
+        const byIndex = (a, b) => (a.index || 0) - (b.index || 0);
+        gridBtns.sort(byIndex);
+        ledBtns.sort(byIndex);
+        encoders.sort(byIndex);
+
+        // ── Grid dimensions ───────────────────────────────────────────────────
+        const hasDim = b => b.position != null;
+        const uxSet  = new Set(gridBtns.filter(hasDim).map(b => b.position[0]));
+        const uySet  = new Set(gridBtns.filter(hasDim).map(b => b.position[1]));
+        const nCols  = uxSet.size  || Math.ceil(Math.sqrt(gridBtns.length)) || 1;
+        const nRows  = uySet.size  || Math.ceil(gridBtns.length / nCols)   || 1;
+
+        const tileW = gridBtns.length && Array.isArray(gridBtns[0].dimension)
+            ? gridBtns[0].dimension[0] : 90;
+        const tileH = gridBtns.length && Array.isArray(gridBtns[0].dimension)
+            ? gridBtns[0].dimension[1] : 90;
+
+        const gridW = nCols * tileW + (nCols - 1) * GAP;
+        const gridH = nRows * tileH + (nRows - 1) * GAP;
+
+        // ── Strip dimensions ──────────────────────────────────────────────────
+        const stripDim = (name) => {
+            const b = strips[name];
+            return b && Array.isArray(b.dimension)
+                ? { w: b.dimension[0], h: b.dimension[1] }
+                : { w: 0, h: 0 };
+        };
+        const lsd = stripDim('left');
+        const rsd = stripDim('right');
+
+        // ── LED row dimensions ────────────────────────────────────────────────
+        const ledDim = () => {
+            if (!ledBtns.length) return 0;
+            const b = ledBtns[0];
+            return Array.isArray(b.dimension) ? b.dimension[0]
+                 : typeof b.dimension === 'number' ? b.dimension * 2 : 48;
+        };
+        const ledSize = ledDim();
+        const ledRowH = ledBtns.length ? ledSize : 0;
+
+        // ── Touchscreen dimensions ────────────────────────────────────────────
+        const tsW = touchscreen && Array.isArray(touchscreen.dimension) ? touchscreen.dimension[0] : 0;
+        const tsH = touchscreen && Array.isArray(touchscreen.dimension) ? touchscreen.dimension[1] : 0;
+
+        // ── Column widths ─────────────────────────────────────────────────────
+        const leftColW  = lsd.w > 0 ? lsd.w + GAP : 0;
+        const rightColW = rsd.w > 0 ? GAP + rsd.w : 0;
+
+        // ── Canvas size ───────────────────────────────────────────────────────
+        const centerH    = Math.max(gridH, lsd.h, rsd.h);
+        const bottomRows = [tsH > 0 ? tsH + GAP : 0, ledRowH > 0 ? ledRowH + GAP : 0]
+                               .reduce((s, v) => s + v, 0);
+
+        const canvasW = PAD + leftColW + gridW + rightColW + PAD;
+        const canvasH = PAD + centerH + bottomRows + PAD;
+
+        // ── Place grid buttons ────────────────────────────────────────────────
+        const sortedUX = [...uxSet].sort((a, b) => a - b);
+        const sortedUY = [...uySet].sort((a, b) => a - b);
+        const gridStartX = PAD + leftColW;
+        const gridStartY = PAD + Math.round((centerH - gridH) / 2);
+
+        gridBtns.forEach(btn => {
+            let col, row;
+            if (btn.position && sortedUX.length > 1) {
+                col = sortedUX.indexOf(btn.position[0]);
+                row = sortedUY.indexOf(btn.position[1]);
+            } else {
+                const idx = btn.index || 0;
+                col = idx % nCols;
+                row = Math.floor(idx / nCols);
+            }
+            this._layout[btn.name] = {
+                x: gridStartX + col * (tileW + GAP),
+                y: gridStartY + row * (tileH + GAP),
+                w: tileW, h: tileH,
+            };
+        });
+
+        // ── Place strips ──────────────────────────────────────────────────────
+        if (strips['left']) {
+            this._layout['left'] = {
+                x: PAD,
+                y: PAD + Math.round((centerH - lsd.h) / 2),
+                w: lsd.w, h: lsd.h,
+            };
+        }
+        if (strips['right']) {
+            this._layout['right'] = {
+                x: PAD + leftColW + gridW + GAP,
+                y: PAD + Math.round((centerH - rsd.h) / 2),
+                w: rsd.w, h: rsd.h,
+            };
+        }
+
+        // ── Place touchscreen (below grid) ────────────────────────────────────
+        let nextRowY = PAD + centerH + GAP;
+        if (touchscreen) {
+            this._layout['touchscreen'] = {
+                x: PAD + leftColW,
+                y: nextRowY,
+                w: tsW, h: tsH,
+            };
+            // Mosaic sub-tiles: buttons whose names start with 'touchscreen'
+            // but are not 'touchscreen' itself — keep their relative position
+            // within the panel using hardware offset data.
+            const subTiles = Object.values(this.buttons).filter(
+                b => b.name !== 'touchscreen' && String(b.name).startsWith('touchscreen')
+            );
+            if (subTiles.length) {
+                const hwMinX = Math.min(...subTiles.map(b => b.position?.[0] ?? 0));
+                const hwMinY = Math.min(...subTiles.map(b => b.position?.[1] ?? 0));
+                const tsLayout = this._layout['touchscreen'];
+                subTiles.forEach(b => {
+                    if (!b.position || !Array.isArray(b.dimension)) return;
+                    this._layout[b.name] = {
+                        x: tsLayout.x + (b.position[0] - hwMinX),
+                        y: tsLayout.y + (b.position[1] - hwMinY),
+                        w: b.dimension[0], h: b.dimension[1],
+                    };
+                });
+            }
+            nextRowY += tsH + GAP;
+        }
+
+        // ── Place LED / hardware buttons ──────────────────────────────────────
+        if (ledBtns.length) {
+            const ledTotalW = ledBtns.length * ledSize + (ledBtns.length - 1) * GAP;
+            const ledStartX = Math.round((canvasW - ledTotalW) / 2);
+            ledBtns.forEach((btn, i) => {
+                this._layout[btn.name] = {
+                    x: ledStartX + i * (ledSize + GAP),
+                    y: nextRowY,
+                    w: ledSize, h: ledSize,
+                };
+            });
+        }
+
+        // ── Encoder hit zones ─────────────────────────────────────────────────
+        // Classify encoders into left / right / bottom groups via hardware x
+        // relative to the hardware grid extent.
+        const hwPositioned = gridBtns.filter(hasDim);
+        const hwMinX = hwPositioned.length
+            ? Math.min(...hwPositioned.map(b => b.position[0])) : 0;
+        const hwMaxX = hwPositioned.length
+            ? Math.max(...hwPositioned.map(b => b.position[0] + (b.dimension?.[0] || 0))) : 1;
+        const hwMaxY = hwPositioned.length
+            ? Math.max(...hwPositioned.map(b => b.position[1] + (b.dimension?.[1] || 0))) : 1;
+
+        const leftEncs   = encoders.filter(e => e.position && e.position[0] <  hwMinX);
+        const rightEncs  = encoders.filter(e => e.position && e.position[0] >= hwMaxX);
+        const bottomEncs = encoders.filter(
+            e => e.position && e.position[1] >= hwMaxY && !leftEncs.includes(e) && !rightEncs.includes(e)
+        );
+
+        const makeEncZones = (encs, baseRect) => {
+            if (!encs.length || !baseRect) return;
+            const zoneH = baseRect.h / encs.length;
+            encs.forEach((enc, i) => {
+                this._encZones.push({
+                    name: enc.name,
+                    x: baseRect.x, y: baseRect.y + i * zoneH,
+                    w: baseRect.w, h: zoneH,
+                });
+            });
+        };
+
+        makeEncZones(leftEncs,  this._layout['left']);
+        makeEncZones(rightEncs, this._layout['right']);
+
+        // Bottom encoders (e.g. Stream Deck +): give each a square zone
+        if (bottomEncs.length) {
+            const encSize  = 60;
+            const encTotalW = bottomEncs.length * encSize + (bottomEncs.length - 1) * GAP;
+            const encStartX = Math.round((canvasW - encTotalW) / 2);
+            const encY = nextRowY;
+            bottomEncs.forEach((enc, i) => {
+                this._encZones.push({
+                    name: enc.name,
+                    x: encStartX + i * (encSize + GAP), y: encY,
+                    w: encSize, h: encSize,
+                });
+            });
+        }
+
+        this._canvasW = canvasW;
+        this._canvasH = canvasH;
+        this._applySize(canvasW, canvasH);
+    }
+
+    // ── Sizing ─────────────────────────────────────────────────────────────────
+
+    _applySize(w, h) {
+        this.canvas.width  = w;
+        this.canvas.height = h;
+        if (typeof window.cockpitdecksSetDeckSize === 'function') {
+            window.cockpitdecksSetDeckSize(w, h);
+        }
+        this._redrawAll();
+    }
+
+    // ── Drawing ────────────────────────────────────────────────────────────────
+
+    _redrawAll() {
+        const ctx = this.ctx;
+        ctx.fillStyle = this._bgColor;
+        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        for (const key of Object.keys(this._images)) {
+            this._blitButton(key);
+        }
+    }
+
+    _blitButton(key) {
+        const img    = this._images[key];
+        const layout = this._layout[key];
+        if (!img || !layout) return;
+        this.ctx.drawImage(img, layout.x, layout.y, layout.w, layout.h);
+    }
+
+    // ── Hit detection ──────────────────────────────────────────────────────────
+
+    /** Pointer hit — matches strips, grid, LED; skips encoder zones. */
+    _buttonAt(cx, cy) {
+        for (const [key, r] of Object.entries(this._layout)) {
+            if (cx >= r.x && cx <= r.x + r.w && cy >= r.y && cy <= r.y + r.h) {
+                return this.buttons[key] || null;
+            }
+        }
+        return null;
+    }
+
+    /** Wheel hit — matches encoder zones only. */
+    _encoderAt(cx, cy) {
+        for (const zone of this._encZones) {
+            if (cx >= zone.x && cx <= zone.x + zone.w &&
+                cy >= zone.y && cy <= zone.y + zone.h) {
+                return this.buttons[zone.name] || null;
+            }
+        }
+        return null;
+    }
+
+    _hasAction(btn, action) {
+        return btn && Array.isArray(btn.actions) && btn.actions.includes(action);
+    }
+
+    _canvasXY(e) {
+        const rect = this.canvas.getBoundingClientRect();
+        const sx = this.canvas.width  / rect.width;
+        const sy = this.canvas.height / rect.height;
+        const src = e.touches ? e.touches[0] : e;
+        return [(src.clientX - rect.left) * sx, (src.clientY - rect.top) * sy];
+    }
+
+    _relPos(layout, cx, cy) {
+        return [cx - layout.x, cy - layout.y];
+    }
+
+    // ── Slider value from pointer position ────────────────────────────────────
+
+    _sliderValue(btn, layout, cx, cy) {
+        const range = btn.range || [0, 100];
+        const horiz = layout.w > layout.h;
+        const pos   = horiz ? cx - layout.x : cy - layout.y;
+        const span  = horiz ? layout.w : layout.h;
+        let frac    = Math.max(0, Math.min(1, pos / span));
+        if (!horiz) frac = 1 - frac;
+        return range[0] + Math.round(frac * (range[1] - range[0]));
+    }
+
+    // ── Event wiring ───────────────────────────────────────────────────────────
+
+    _setupEvents() {
+        const canvas = this.canvas;
+
+        // ── Pointer down ──────────────────────────────────────────────────────
+        canvas.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            const [cx, cy] = this._canvasXY(e);
+            const btn    = this._buttonAt(cx, cy);
+            if (!btn) return;
+            const layout = this._layout[btn.name];
+
+            this._pressing = btn;
+            this._sliding  = false;
+
+            if (this._hasAction(btn, 'push')) {
+                canvas.style.cursor = 'pointer';
+                sendEvent(this.name, btn.name, 1, {x: cx - layout.x, y: cy - layout.y, ts: Date.now()});
+
+            } else if (this._hasAction(btn, 'swipe')) {
+                canvas.style.cursor = 'grab';
+
+            } else if (this._hasAction(btn, 'cursor')) {
+                canvas.style.cursor = 'ns-resize';
+                this._sliderDragging = { btn, layout };
+                sendEvent(this.name, btn.name, 9, {x: cx, y: cy, value: this._sliderValue(btn, layout, cx, cy), ts: Date.now()});
+            }
+        }, { passive: false });
+
+        // ── Pointer move ──────────────────────────────────────────────────────
+        canvas.addEventListener('pointermove', (e) => {
+            e.preventDefault();
+            const [cx, cy] = this._canvasXY(e);
+
+            if (this._sliderDragging) return;
+
+            if (this._pressing && this._hasAction(this._pressing, 'swipe') && !this._sliding) {
+                this._sliding = true;
+                canvas.style.cursor = 'grabbing';
+                const layout = this._layout[this._pressing.name];
+                if (layout) {
+                    const [rx, ry] = this._relPos(layout, cx, cy);
+                    sendEvent(this.name, this._pressing.name, 10, {x: rx, y: ry, ts: Date.now()});
+                }
+            }
+
+            if (!this._pressing) {
+                const btn = this._buttonAt(cx, cy);
+                if (btn) {
+                    canvas.style.cursor = 'pointer';
+                } else {
+                    const enc = this._encoderAt(cx, cy);
+                    canvas.style.cursor = enc ? `url('${POINTERS.clockwise}') 12 0, pointer` : 'auto';
+                }
+            }
+        }, { passive: false });
+
+        // ── Pointer up ────────────────────────────────────────────────────────
+        canvas.addEventListener('pointerup', (e) => {
+            e.preventDefault();
+            const [cx, cy] = this._canvasXY(e);
+            canvas.style.cursor = 'auto';
+
+            if (this._sliderDragging) {
+                const { btn, layout } = this._sliderDragging;
+                sendEvent(this.name, btn.name, 9, {x: cx, y: cy, value: this._sliderValue(btn, layout, cx, cy), ts: Date.now()});
+                this._sliderDragging = null;
+                this._pressing = null;
+                return;
+            }
+
+            const btn = this._pressing;
+            this._pressing = null;
+            if (!btn) return;
+
+            const layout = this._layout[btn.name];
+
+            if (this._hasAction(btn, 'push')) {
+                sendEvent(this.name, btn.name, 0, {x: cx - (layout?.x || 0), y: cy - (layout?.y || 0), ts: Date.now()});
+
+            } else if (this._hasAction(btn, 'swipe')) {
+                if (layout) {
+                    const [rx, ry] = this._relPos(layout, cx, cy);
+                    sendEvent(this.name, btn.name, this._sliding ? 11 : 14, {x: rx, y: ry, ts: Date.now()});
+                }
+                this._sliding = false;
+            }
+        }, { passive: false });
+
+        // ── Wheel (encoder rotation) ───────────────────────────────────────────
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const [cx, cy] = this._canvasXY(e);
+            const enc = this._encoderAt(cx, cy);
+            if (!enc) return;
+            const zone = this._encZones.find(z => z.name === enc.name);
+            const step = 4;
+            if (e.deltaY > step) {
+                sendEvent(this.name, enc.name, 2, {x: cx - (zone?.x || 0), y: cy - (zone?.y || 0), ts: Date.now()});
+            } else if (e.deltaY < -step) {
+                sendEvent(this.name, enc.name, 3, {x: cx - (zone?.x || 0), y: cy - (zone?.y || 0), ts: Date.now()});
+            }
+        }, { passive: false });
+
+        // ── Touch (mobile) ────────────────────────────────────────────────────
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const [cx, cy] = this._canvasXY(e);
+            const btn = this._buttonAt(cx, cy);
+            if (!btn) return;
+            this._pressing = btn;
+            this._sliding  = false;
+            if (this._hasAction(btn, 'swipe')) {
+                const layout = this._layout[btn.name];
+                if (layout) {
+                    const [rx, ry] = this._relPos(layout, cx, cy);
+                    sendEvent(this.name, btn.name, 10, {x: rx, y: ry, ts: Date.now()});
+                }
+            }
+        }, { passive: false });
+
+        canvas.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            const btn = this._pressing;
+            this._pressing = null;
+            if (!btn) return;
+            const touch  = e.changedTouches[0];
+            const rect   = canvas.getBoundingClientRect();
+            const cx = (touch.clientX - rect.left) * canvas.width  / rect.width;
+            const cy = (touch.clientY - rect.top)  * canvas.height / rect.height;
+            const layout = this._layout[btn.name];
+            if (!layout) return;
+            const [rx, ry] = this._relPos(layout, cx, cy);
+            if (this._hasAction(btn, 'swipe')) {
+                sendEvent(this.name, btn.name, 11, {x: rx, y: ry, ts: Date.now()});
+            } else if (this._hasAction(btn, 'push')) {
+                sendEvent(this.name, btn.name, 14, {x: rx, y: ry, ts: Date.now()});
+            }
+        }, { passive: false });
     }
 }
