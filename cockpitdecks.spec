@@ -20,6 +20,7 @@ _ROOT = os.path.abspath(os.getcwd())
 _WORKSPACE = os.path.abspath(os.path.join(_ROOT, ".."))
 _IS_WINDOWS = sys.platform == "win32"
 _IS_MACOS = sys.platform == "darwin"
+_IS_LINUX = sys.platform == "linux"
 
 
 def _real(path: str) -> str:
@@ -186,6 +187,24 @@ if _IS_MACOS:
         ],
         "macOS Cairo libraries",
     )
+elif _IS_LINUX:
+    # On Linux, hidapi and cairo are provided as system packages (libhidapi-dev, libcairo2-dev).
+    # PyInstaller picks up shared libraries via ctypes/cffi automatically; no explicit bundling needed.
+    # Users must have these installed: sudo apt-get install libhidapi-dev libcairo2-dev
+    _bundle_candidates(
+        [
+            ("libhidapi-hidraw.so.0", [
+                "/usr/lib/x86_64-linux-gnu/libhidapi-hidraw.so.0",
+                "/usr/lib/libhidapi-hidraw.so.0",
+            ]),
+            ("libhidapi-libusb.so.0", [
+                "/usr/lib/x86_64-linux-gnu/libhidapi-libusb.so.0",
+                "/usr/lib/libhidapi-libusb.so.0",
+            ]),
+        ],
+        "Linux HID libraries",
+    )
+
 elif _IS_WINDOWS:
     # First-pass Windows packaging uses GTK/MSYS2-provided Cairo and hidapi DLLs when present.
     _WINDOWS_DLL_ROOTS = [
