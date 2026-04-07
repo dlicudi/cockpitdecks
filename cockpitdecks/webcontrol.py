@@ -309,6 +309,7 @@ def _dataref_traffic_stats(sim) -> dict:
         "dataref_updates_received": stats.get("response_update", 0),
         "dataref_values_processed": stats.get("update_dataref", 0),
         "batch_events": stats.get("batch_events", 0),
+        "ws_stall_count": getattr(sim, "_ws_stall_count", 0),
     }
 
 
