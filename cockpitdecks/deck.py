@@ -825,7 +825,10 @@ class DeckWithIcons(Deck):
         thumbnail_max_height = final_image.height - (margins[0] + margins[2])
 
         thumbnail = image.convert("RGBA")
-        thumbnail.thumbnail((thumbnail_max_width, thumbnail_max_height), Image.BILINEAR)
+        scale = min(thumbnail_max_width / max(1, thumbnail.width), thumbnail_max_height / max(1, thumbnail.height))
+        new_w = round(thumbnail.width * scale)
+        new_h = round(thumbnail.height * scale)
+        thumbnail = thumbnail.resize((new_w, new_h), Image.LANCZOS)
 
         thumbnail_x = margins[3] + (thumbnail_max_width - thumbnail.width) // 2
         thumbnail_y = margins[0] + (thumbnail_max_height - thumbnail.height) // 2
