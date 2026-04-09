@@ -45,6 +45,8 @@ class Push(DeckActivation):
     """
 
     ACTIVATION_NAME = "push"
+    EDITOR_FAMILY = "Push Button"
+    EDITOR_LABEL = "Momentary Command"
     REQUIRED_DECK_ACTIONS = [DECK_ACTIONS.PRESS, DECK_ACTIONS.LONGPRESS, DECK_ACTIONS.PUSH]
 
     PARAMETERS = DeckActivation.PARAMETERS | PARAM_PUSH_AUTOREPEAT | PARAM_INITIAL_VALUE | PARAM_COMMAND_BLOCK
@@ -208,6 +210,8 @@ class BeginEndPress(Push):
     """
 
     ACTIVATION_NAME = "begin-end-command"
+    EDITOR_FAMILY = "Push Button"
+    EDITOR_LABEL = "Begin / End Command"
     REQUIRED_DECK_ACTIONS = [DECK_ACTIONS.PRESS, DECK_ACTIONS.LONGPRESS, DECK_ACTIONS.PUSH]
 
     PARAMETERS = {"command": {"type": "string", "prompt": "Command", "mandatory": True}}
@@ -260,6 +264,8 @@ class BeginEndPress(Push):
 
 
 class OnOff(Activation):
+    EDITOR_FAMILY = "Push Button"
+    EDITOR_LABEL = "Toggle"
     """
     Defines a On / Off push activation: Two commands are executed alternatively.
     On or Off status is determined by the number of time a button is pressed.
@@ -268,7 +274,10 @@ class OnOff(Activation):
     ACTIVATION_NAME = "onoff"
     REQUIRED_DECK_ACTIONS = [DECK_ACTIONS.PRESS, DECK_ACTIONS.LONGPRESS, DECK_ACTIONS.PUSH]
 
-    PARAMETERS = PARAM_INITIAL_VALUE | {"commands": {"type": "sub", "list": PARAM_COMMAND_BLOCK, "min": 2, "max": 2}}
+    PARAMETERS = PARAM_INITIAL_VALUE | {
+        "command-on": {"type": "string", "label": "On Command", "mandatory": True},
+        "command-off": {"type": "string", "label": "Off Command", "mandatory": True},
+    }
 
     # PARAMETERS = PARAM_INITIAL_VALUE | {
     #     "commands": {"type": "sub", "list": [
@@ -283,11 +292,15 @@ class OnOff(Activation):
 
         # Activation arguments
         # Commands
-        self._commands = []
-        cmds = button._config.get(CONFIG_KW.COMMANDS.value)
-        if cmds is not None:
-            cmdname = ":".join([self.button.get_id(), type(self).__name__])
-            self._commands = [self.sim.instruction_factory(name=cmdname, instruction_block={CONFIG_KW.COMMAND.value: cmd}) for cmd in cmds]
+        cmdname = ":".join([self.button.get_id(), type(self).__name__])
+        self._command_on = None
+        self._command_off = None
+        cmd_on = button._config.get("command-on")
+        cmd_off = button._config.get("command-off")
+        if cmd_on is not None:
+            self._command_on = self.sim.instruction_factory(name=cmdname + ":on", instruction_block={CONFIG_KW.COMMAND.value: cmd_on})
+        if cmd_off is not None:
+            self._command_off = self.sim.instruction_factory(name=cmdname + ":off", instruction_block={CONFIG_KW.COMMAND.value: cmd_off})
 
         # Internal variables
         self.onoff_current_value = False  # bool on or off, true = on
@@ -309,7 +322,8 @@ class OnOff(Activation):
             + "\n"
             + ", ".join(
                 [
-                    f"commands: {self._commands}",
+                    f"command-on: {self._command_on}",
+                    f"command-off: {self._command_off}",
                     f"is_off: {self.is_off()}",
                     f"is_valid: {self.is_valid()}",
                 ]
@@ -317,15 +331,15 @@ class OnOff(Activation):
         )
 
     def num_commands(self) -> int:
-        return len(self._commands) if self._commands is not None else 0
+        return int(self._command_on is not None) + int(self._command_off is not None)
 
     def is_valid(self):
         if self.num_commands() > 0:
             if self.num_commands() < 2:
-                logger.error(f"button {self.button_name}: {type(self).__name__} must have at least two commands")
+                logger.error(f"button {self.button_name}: {type(self).__name__} must have both command-on and command-off")
                 return False
         elif self._set_sim_data is None:
-            logger.error(f"button {self.button_name}: {type(self).__name__} must have at least two commands or a dataref to write to")
+            logger.error(f"button {self.button_name}: {type(self).__name__} must have command-on and command-off or a dataref to write to")
             return False
         return super().is_valid()
 
@@ -370,9 +384,9 @@ class OnOff(Activation):
         if event.pressed:
             if self.num_commands() > 1:
                 if self.is_off():
-                    self._commands[0].execute()
+                    self._command_on.execute()
                 else:
-                    self._commands[1].execute()
+                    self._command_off.execute()
             # Update current value and write dataref if present
             self.onoff_current_value = not self.onoff_current_value
             # self.button.value = self.onoff_current_value  # update internal state
@@ -393,10 +407,10 @@ class OnOff(Activation):
         Describe what the button does in plain English
         """
         a = []
-        if self._commands is not None and len(self._commands) > 1:
+        if self._command_on is not None and self._command_off is not None:
             a = a + [
-                f"The button executes command {self._commands[0]} when its current value is OFF (0).",
-                f"The button executes command {self._commands[1]} when its current value is ON (not 0).",
+                f"The button executes command {self._command_on} when its current value is OFF (0).",
+                f"The button executes command {self._command_off} when its current value is ON (not 0).",
             ]
         a.append(f"The button does nothing when it is de-activated (released).")
         if self._set_sim_data is not None:
@@ -412,6 +426,8 @@ class OnOff(Activation):
 
 
 class ShortOrLongpress(Activation):
+    EDITOR_FAMILY = "Push Button"
+    EDITOR_LABEL = "Short / Long Press"
     """
     Execute beginCommand while the key is pressed and endCommand when the key is released.
     """
@@ -430,11 +446,15 @@ class ShortOrLongpress(Activation):
 
         # Activation arguments
         # Commands
-        self._commands = []
-        cmds = button._config.get(CONFIG_KW.COMMANDS.value)
-        if cmds is not None:
-            cmdname = ":".join([self.button.get_id(), type(self).__name__])
-            self._commands = [self.sim.instruction_factory(name=cmdname, instruction_block={CONFIG_KW.COMMAND.value: cmd}) for cmd in cmds]
+        cmdname = ":".join([self.button.get_id(), type(self).__name__])
+        self._command_short = None
+        self._command_long = None
+        cmd_short = button._config.get("command-short")
+        cmd_long = button._config.get("command-long")
+        if cmd_short is not None:
+            self._command_short = self.sim.instruction_factory(name=cmdname + ":short", instruction_block={CONFIG_KW.COMMAND.value: cmd_short})
+        if cmd_long is not None:
+            self._command_long = self.sim.instruction_factory(name=cmdname + ":long", instruction_block={CONFIG_KW.COMMAND.value: cmd_long})
 
         # Internal variables
         self.long_time = self._config.get("long-time", 2)
@@ -447,15 +467,21 @@ class ShortOrLongpress(Activation):
         if not event.pressed:
             if self.num_commands() > 1:
                 if self.duration < self.long_time:
-                    self._commands[0].execute()
+                    self._command_short.execute()
                     logger.debug(f"short {self.duration}, {self.long_time}")
                 else:
-                    self._commands[1].execute()
+                    self._command_long.execute()
                     logger.debug(f"looooong {self.duration}, {self.long_time}")
         return True  # normal termination
 
     def num_commands(self):
-        return len(self._commands) if self._commands is not None else 0
+        return int(self._command_short is not None) + int(self._command_long is not None)
+
+    def is_valid(self):
+        if self.num_commands() < 2:
+            logger.error(f"button {self.button_name}: {type(self).__name__} must have command-short and command-long")
+            return False
+        return super().is_valid()
 
     def inspect(self, what: str | None = None):
         if what is not None and "activation" in what:
@@ -467,14 +493,16 @@ class ShortOrLongpress(Activation):
         """
         return "\n\r".join(
             [
-                f"The button executes {self._commands[0]} when it is activated shortly (pressed).",
-                f"The button ends command {self._commands[1]} when it is de-activated after a long press (released after more than {self.long_time}secs.).",
+                f"The button executes {self._command_short} when it is activated shortly (pressed).",
+                f"The button executes {self._command_long} when it is de-activated after a long press (released after more than {self.long_time}secs.).",
                 "(Begin and end command is a special terminology (phase of execution of a command) of X-Plane.)",
             ]
         )
 
 
 class UpDown(Activation):
+    EDITOR_FAMILY = "Push Button"
+    EDITOR_LABEL = "Up / Down"
     """
     Defines a button activation for a button that runs back and forth
     between 2 values like -2 1 0 1 2, or 0 1 2 3 4 3 2 1 0.
@@ -486,7 +514,8 @@ class UpDown(Activation):
     REQUIRED_DECK_ACTIONS = [DECK_ACTIONS.PRESS, DECK_ACTIONS.LONGPRESS, DECK_ACTIONS.PUSH]
 
     PARAMETERS = PARAM_INITIAL_VALUE | {
-        "commands": {"type": "sub", "list": PARAM_COMMAND_BLOCK, "min": 2, "max": 2},
+        "command-up": {"type": "string", "label": "Up Command", "mandatory": True},
+        "command-down": {"type": "string", "label": "Down Command", "mandatory": True},
         "stops": {"type": "integer", "prompt": "Number of stops", "default-value": 2},
     }
 
@@ -496,11 +525,15 @@ class UpDown(Activation):
         # Activation arguments
         self.stops = int(button._config.get("stops", 2))  # may fail
         # Commands
-        self._commands = []
-        cmds = button._config.get(CONFIG_KW.COMMANDS.value)
-        if cmds is not None:
-            cmdname = ":".join([self.button.get_id(), type(self).__name__])
-            self._commands = [self.sim.instruction_factory(name=cmdname, instruction_block={CONFIG_KW.COMMAND.value: cmd}) for cmd in cmds]
+        cmdname = ":".join([self.button.get_id(), type(self).__name__])
+        self._command_up = None
+        self._command_down = None
+        cmd_up = button._config.get("command-up")
+        cmd_down = button._config.get("command-down")
+        if cmd_up is not None:
+            self._command_up = self.sim.instruction_factory(name=cmdname + ":up", instruction_block={CONFIG_KW.COMMAND.value: cmd_up})
+        if cmd_down is not None:
+            self._command_down = self.sim.instruction_factory(name=cmdname + ":down", instruction_block={CONFIG_KW.COMMAND.value: cmd_down})
 
         # Internal variables
         self.go_up = True
@@ -533,7 +566,8 @@ class UpDown(Activation):
             + "\n"
             + ", ".join(
                 [
-                    f"commands: {self._commands}",
+                    f"command-up: {self._command_up}",
+                    f"command-down: {self._command_down}",
                     f"stops: {self.stops}",
                     f"is_valid: {self.is_valid()}",
                 ]
@@ -541,15 +575,15 @@ class UpDown(Activation):
         )
 
     def num_commands(self):
-        return len(self._commands) if self._commands is not None else 0
+        return int(self._command_up is not None) + int(self._command_down is not None)
 
     def is_valid(self):
         if self.num_commands() > 0:
             if self.num_commands() < 2:
-                logger.error(f"button {self.button_name}: {type(self).__name__} must have at least 2 commands")
+                logger.error(f"button {self.button_name}: {type(self).__name__} must have command-up and command-down")
                 return False
         elif self._set_sim_data is None:
-            logger.error(f"button {self.button_name}: {type(self).__name__} must have at least two commands or a dataref to write to")
+            logger.error(f"button {self.button_name}: {type(self).__name__} must have command-up and command-down or a dataref to write to")
             return False
         if self.stops is None or self.stops == 0:
             logger.error(f"button {self.button_name}: {type(self).__name__} must have a number of stops")
@@ -571,29 +605,18 @@ class UpDown(Activation):
                 self.go_up = False
             nextval = int(currval + 1 if self.go_up else currval - 1)
             logger.debug(f"{currval}, {nextval}, {self.go_up}")
-            if self.stops > 2 and self.num_commands() > 2 and self.num_commands() == self.stops:
-                self._commands[nextval].execute()
-                if self.go_up:
-                    if nextval >= (self.stops - 1):
-                        nextval = self.stops - 1
-                        self.go_up = False
-                else:
-                    if nextval <= 0:
-                        nextval = 0
-                        self.go_up = True
+            if self.go_up:
+                if self._command_up is not None:
+                    self._command_up.execute()
+                if nextval >= (self.stops - 1):
+                    nextval = self.stops - 1
+                    self.go_up = False
             else:
-                if self.go_up:
-                    if self.num_commands() > 0:
-                        self._commands[0].execute()  # up
-                    if nextval >= (self.stops - 1):
-                        nextval = self.stops - 1
-                        self.go_up = False
-                else:
-                    if self.num_commands() > 1:
-                        self._commands[1].execute()  # down
-                    if nextval <= 0:
-                        nextval = 0
-                        self.go_up = True
+                if self._command_down is not None:
+                    self._command_down.execute()
+                if nextval <= 0:
+                    nextval = 0
+                    self.go_up = True
             # Update current value and write dataref if present
             self.stop_current_value = nextval
         return True  # normal termination
@@ -613,9 +636,9 @@ class UpDown(Activation):
         Describe what the button does in plain English
         """
         a = []
-        if self._commands is not None and len(self._commands) > 1:
-            a.append(f"The button executes command {self._commands[0]} when it increases its current value.")
-            a.append(f"The button executes command {self._commands[1]} when it decreases its current value.")
+        if self._command_up is not None and self._command_down is not None:
+            a.append(f"The button executes command {self._command_up} when it increases its current value.")
+            a.append(f"The button executes command {self._command_down} when it decreases its current value.")
         a.append(f"The button does nothing when it is de-activated (released).")
         if self._set_sim_data is not None:
             a.append(f"The button writes its value in dataref {self._set_sim_data.name}.")
@@ -670,6 +693,8 @@ class EncoderProperties:
 
 
 class Encoder(Activation, EncoderProperties):
+    EDITOR_FAMILY = "Encoder"
+    EDITOR_LABEL = "Encoder"
     """
     Defines a know with stepped value.
     One command is executed when the encoder is turned clockwise one step,
@@ -738,6 +763,8 @@ class Encoder(Activation, EncoderProperties):
 
 
 class EncoderPush(Push, EncoderProperties):
+    EDITOR_FAMILY = "Encoder"
+    EDITOR_LABEL = "Encoder Push"
     """
     Defines a encoder with stepped value coupled to a Push button.
     First command is executed when encoder is pushed.
@@ -871,6 +898,8 @@ class EncoderPush(Push, EncoderProperties):
 
 
 class EncoderOnOff(OnOff, EncoderProperties):
+    EDITOR_FAMILY = "Encoder"
+    EDITOR_LABEL = "Encoder Toggle"
     """
     Defines a encoder with stepped value coupled to a OnOff button.
     First command is executed when button is Off and pressed.
@@ -1002,6 +1031,8 @@ class EncoderOnOff(OnOff, EncoderProperties):
 
 
 class EncoderValue(OnOff, EncoderProperties):
+    EDITOR_FAMILY = "Encoder"
+    EDITOR_LABEL = "Encoder Value"
     """
     Activation that maintains an internal value and optionally write that value to a dataref
     """
@@ -1130,6 +1161,8 @@ class EncoderValue(OnOff, EncoderProperties):
 
 
 class EncoderValueExtended(OnOff, EncoderProperties):
+    EDITOR_FAMILY = "Encoder"
+    EDITOR_LABEL = "Encoder Value Extended"
     """
     Activation that maintains an internal value and optionally write that value to a dataref
     """
@@ -1303,6 +1336,8 @@ class EncoderValueExtended(OnOff, EncoderProperties):
 #
 #
 class Slider(Activation):  # Cursor?
+    EDITOR_FAMILY = "Touch"
+    EDITOR_LABEL = "Slider"
     """
     A Encoder that can turn left/right.
     """
@@ -1389,6 +1424,8 @@ class Slider(Activation):  # Cursor?
 #
 #
 class Swipe(Activation):
+    EDITOR_FAMILY = "Touch"
+    EDITOR_LABEL = "Swipe"
     """
     A Encoder that can turn left/right.
     """
@@ -1420,6 +1457,8 @@ class Swipe(Activation):
 
 
 class EncoderToggle(Activation, EncoderProperties):
+    EDITOR_FAMILY = "Encoder"
+    EDITOR_LABEL = "Encoder Mode Toggle"
     """
     Defines a encoder with stepped value coupled to an on/off button.
 
@@ -1561,6 +1600,8 @@ class EncoderToggle(Activation, EncoderProperties):
 # (large icons composed from multiple icons)
 #
 class Mosaic(Activation):
+    EDITOR_FAMILY = "Touch"
+    EDITOR_LABEL = "Mosaic Surface"
     """
     Defines a Push activation.
     The supplied command is executed each time a button is pressed.

@@ -34,6 +34,8 @@ LABEL_COLOR = grey(255)
 #
 #
 class TapeIcon(DrawBase):
+    EDITOR_FAMILY = "Gauge / Dial"
+    EDITOR_LABEL = "Tape"
 
     REPRESENTATION_NAME = "tape"
 
@@ -319,6 +321,8 @@ class TapeIcon(DrawBase):
 
 
 class GaugeIcon(DrawBase):
+    EDITOR_FAMILY = "Gauge / Dial"
+    EDITOR_LABEL = "Gauge"
 
     REPRESENTATION_NAME = "gauge"
 
@@ -496,6 +500,8 @@ class GaugeIcon(DrawBase):
 
 
 class CompassIcon(GaugeIcon):
+    EDITOR_FAMILY = "Gauge / Dial"
+    EDITOR_LABEL = "Compass"
     """A Compass is a circular gauge (360°)"""
 
     REPRESENTATION_NAME = "compass"

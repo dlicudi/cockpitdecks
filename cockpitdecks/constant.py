@@ -351,7 +351,7 @@ class Config(MutableMapping):
                 dirname = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "")
                 try:
                     with open(filename, "r", encoding="utf-8") as fp:
-                        self.store = yaml.load(fp)
+                        self.store = yaml.load(fp) or {}
                         init_logger.info(f"loaded config from {os.path.abspath(filename).replace(dirname, '')}")
                     self.store[CONFIG_FILENAME] = filename
                 except:

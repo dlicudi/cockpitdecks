@@ -115,6 +115,9 @@ class Page:
     def load_buttons(self, buttons: dict, deck_type: DeckType, add_to_page: bool = True) -> list:
         built = []
         started_at = time.perf_counter()
+        if deck_type is None:
+            logger.error(f"page {self.name}: no deck type available, cannot load buttons")
+            return built
         for button_config in buttons:
             try:
                 button = None

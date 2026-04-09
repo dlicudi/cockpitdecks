@@ -172,7 +172,13 @@ class IconBase(Representation):
         if not already_copied:
             image = image.copy()  # we will add text over it
 
-        text_size = int(text.size * image.width / 72) if text.prefix == CONFIG_KW.LABEL.value else int(text.size)
+        # Keep text and label sizing proportional to the rendered button size.
+        # Using raw pixel values for `text-size` makes the same numeric value look
+        # drastically smaller than `label-size` on high-resolution virtual decks.
+        if text.prefix in {CONFIG_KW.LABEL.value, CONFIG_KW.TEXT.value}:
+            text_size = max(1, int(text.size * image.width / 72))
+        else:
+            text_size = max(1, int(text.size))
         text_font = text.font
         if self.button.is_managed() and text.prefix == CONFIG_KW.TEXT.value:
             txtmod = self.button.manager.get("text-modifier", "dot").lower()
@@ -232,6 +238,8 @@ class IconBase(Representation):
 class Icon(IconBase):
 
     REPRESENTATION_NAME = "icon"
+    EDITOR_FAMILY = "Basic"
+    EDITOR_LABEL = "Icon"
     REQUIRED_DECK_FEEDBACKS = DECK_FEEDBACK.IMAGE
 
     # PARAMETERS = {"icon": {"type": "icon", "prompt": "Icon"}, "frame": {"type": "icon", "prompt": "Frame"}}
@@ -363,6 +371,8 @@ class Icon(IconBase):
 
 
 class IconColor(IconBase):
+    EDITOR_FAMILY = "Basic"
+    EDITOR_LABEL = "Solid / Textured Icon"
     """Uniform color or texture icon
 
     Attributes:
@@ -391,6 +401,8 @@ class IconText(IconColor):
     """Uniform color or texture icon with text laid over.-"""
 
     REPRESENTATION_NAME = "text"
+    EDITOR_FAMILY = "Basic"
+    EDITOR_LABEL = "Text"
 
     PARAMETERS = IconBase.PARAMETERS | PARAM_TEXT
 
@@ -457,6 +469,8 @@ class IconText(IconColor):
 
 
 class MultiTexts(IconText):
+    EDITOR_FAMILY = "Advanced / Composite"
+    EDITOR_LABEL = "Multi Texts"
     """Same as TextIcon, except we select _text from a list (_milti_texts) based on button value."""
 
     REPRESENTATION_NAME = "multi-texts"
@@ -539,6 +553,8 @@ class MultiTexts(IconText):
 
 
 class MultiIcons(Icon):
+    EDITOR_FAMILY = "Advanced / Composite"
+    EDITOR_LABEL = "Multi Icons"
 
     REPRESENTATION_NAME = "multi-icons"
 

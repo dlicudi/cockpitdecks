@@ -4,12 +4,106 @@ All representations are listed at the end of this file.
 """
 
 import logging
+import inspect
+from typing import Any
 
 from cockpitdecks import ID_SEP, DECK_KW, DECK_FEEDBACK, DEFAULT_ATTRIBUTE_PREFIX, parse_options
 
 
 logger = logging.getLogger(__name__)
 # logger.setLevel(logging.DEBUG)
+
+
+def _editor_label(name: str) -> str:
+    return name.replace("-", " ").replace("_", " ").strip().title()
+
+
+def _editor_role(name: str, normalized_type: str) -> str | None:
+    if name == "command":
+        return "command"
+    if name == "commands":
+        return "command-list"
+    if name.startswith("command-"):
+        return "command"
+    if name == "page":
+        return "page"
+    if name == "pages":
+        return "page-list"
+    if name == "page-labels":
+        return "page-label-list"
+    if name == "deck":
+        return "deck"
+    if name == "formula":
+        return "formula"
+    if name == "label":
+        return "label"
+    if name.startswith("label-"):
+        return "label-style"
+    if name == "text":
+        return "text"
+    if name.startswith("text-"):
+        return "text-style"
+    if normalized_type in ["font", "color", "icon", "sound"]:
+        return normalized_type
+    return None
+
+
+def _editor_normalize_parameter(name: str, spec: Any) -> dict:
+    if not isinstance(spec, dict):
+        return {"name": name, "label": _editor_label(name), "kind": "literal", "value": spec}
+
+    normalized = dict(spec)
+    ptype = normalized.get("type", "string")
+    type_map = {
+        "int": "integer",
+        "bool": "boolean",
+        "lov": "choice",
+        "choice": "choice",
+        "sub": "sub",
+        "sel": "selector",
+    }
+    normalized_type = type_map.get(ptype, ptype)
+    normalized["name"] = name
+    normalized["type"] = normalized_type
+    role = _editor_role(name, normalized_type)
+    if role is not None:
+        normalized["role"] = role
+    normalized.setdefault("label", normalized.get("prompt") or _editor_label(name))
+    if "mandatory" in normalized:
+        normalized["required"] = bool(normalized.pop("mandatory"))
+    if "default-value" in normalized:
+        normalized["default"] = normalized.pop("default-value")
+    if "lov" in normalized and "choices" not in normalized:
+        normalized["choices"] = normalized["lov"]
+
+    child = normalized.get("list")
+    if normalized_type in ["sub", "selector"] and isinstance(child, dict):
+        normalized["fields"] = {k: _editor_normalize_parameter(k, v) for k, v in child.items()}
+    elif normalized_type == "list" and isinstance(child, dict):
+        normalized["item_fields"] = {k: _editor_normalize_parameter(k, v) for k, v in child.items()}
+
+    if normalized_type == "selector" and isinstance(child, dict):
+        normalized["variants"] = {k: _editor_normalize_parameter(k, v) for k, v in child.items()}
+
+    return normalized
+
+
+def _editor_normalize_parameters(parameters: dict) -> dict:
+    return {name: _editor_normalize_parameter(name, spec) for name, spec in (parameters or {}).items()}
+
+
+def _editor_required_parameters(parameters: dict) -> list[str]:
+    return [name for name, spec in _editor_normalize_parameters(parameters).items() if spec.get("required")]
+
+
+def _editor_parameters_by_role(parameters: dict) -> dict[str, list[str]]:
+    roles: dict[str, list[str]] = {}
+    for name, spec in _editor_normalize_parameters(parameters).items():
+        role = spec.get("role")
+        if role is None:
+            continue
+        roles.setdefault(role, []).append(name)
+    return roles
 
 
 # ##########################################
@@ -21,6 +115,9 @@ class Representation:
     """
 
     REPRESENTATION_NAME = "none"
+    EDITOR_FAMILY = "Representation"
+    EDITOR_LABEL = None
+    EDITOR_HINT = None
     REQUIRED_DECK_FEEDBACKS = DECK_FEEDBACK.NONE
 
     PARAMETERS = {
@@ -41,6 +138,40 @@ class Representation:
     def get_required_capability(cls) -> list | tuple:
         r = cls.REQUIRED_DECK_FEEDBACKS
         return r if type(r) in [list, tuple] else [r]
+
+    @classmethod
+    def editor_family(cls) -> str:
+        return cls.EDITOR_FAMILY
+
+    @classmethod
+    def editor_label(cls) -> str:
+        return cls.EDITOR_LABEL or cls.__name__
+
+    @classmethod
+    def editor_hint(cls) -> str:
+        hint = cls.EDITOR_HINT
+        if hint:
+            return hint
+        doc = inspect.getdoc(cls) or ""
+        return doc.splitlines()[0].strip() if doc else ""
+
+    @classmethod
+    def editor_schema(cls) -> dict:
+        parameters = cls.parameters()
+        return {
+            "schema_version": 1,
+            "kind": "representation",
+            "name": cls.name(),
+            "subtype": cls.name(),
+            "label": cls.editor_label(),
+            "family": cls.editor_family(),
+            "hint": cls.editor_hint(),
+            "parameters": parameters,
+            "editor_fields": _editor_normalize_parameters(parameters),
+            "required_parameters": _editor_required_parameters(parameters),
+            "parameters_by_role": _editor_parameters_by_role(parameters),
+            "required_capabilities": [cap.value if hasattr(cap, "value") else str(cap) for cap in cls.get_required_capability()],
+        }
 
     def __init__(self, button: "Button"):
         self._inited = False

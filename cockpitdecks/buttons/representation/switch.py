@@ -144,6 +144,8 @@ class SwitchBase(DrawBase):
 
 
 class CircularSwitch(SwitchBase):
+    EDITOR_FAMILY = "Switch"
+    EDITOR_LABEL = "Circular Switch"
 
     REPRESENTATION_NAME = "circular-switch"
 
@@ -446,6 +448,8 @@ class CircularSwitch(SwitchBase):
 class Switch(SwitchBase):
 
     REPRESENTATION_NAME = "switch"
+    EDITOR_FAMILY = "Switch"
+    EDITOR_LABEL = "Switch"
 
     PARAMETERS = SwitchBase.PARAMETERS | PARAM_BTN_SWITCH
 
@@ -1033,6 +1037,8 @@ class Switch(SwitchBase):
 class PushSwitch(SwitchBase):
 
     REPRESENTATION_NAME = "push-switch"
+    EDITOR_FAMILY = "Switch"
+    EDITOR_LABEL = "Push Switch"
 
     PARAMETERS = SwitchBase.PARAMETERS | PARAM_BTN_PUSH
 
@@ -1100,6 +1106,8 @@ class PushSwitch(SwitchBase):
 
 
 class Knob(SwitchBase):
+    EDITOR_FAMILY = "Switch"
+    EDITOR_LABEL = "Knob"
 
     REPRESENTATION_NAME = "knob"
 

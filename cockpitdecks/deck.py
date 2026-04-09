@@ -876,10 +876,21 @@ class DeckWithIcons(Deck):
         pass
 
     def make_button(self, config: dict):
-        # testing. returns random icon
+        # testing. returns preview button for designer paths
+        deck_type = self.deck_type
+        if deck_type is None:
+            self.set_deck_type()
+            deck_type = self.deck_type
+        if deck_type is None:
+            logger.error(f"button designer: no deck type available for deck {self.name}")
+            return None
+
         page = Page(name="_BUTTONDESIGNER", config={}, deck=self)
-        page.load_buttons(buttons=[config], deck_type=self.deck_type)
-        button: Button = page.buttons[list(page.buttons.keys())[0]]
+        built = page.load_buttons(buttons=[config], deck_type=deck_type)
+        if not built:
+            logger.error(f"button designer: could not build preview button for deck {self.name}")
+            return None
+        button: Button = built[0]
         representation = button._representation
         if not isinstance(representation, IconBase):
             logger.warning(f"button: representation is not an image ({type(representation)})")

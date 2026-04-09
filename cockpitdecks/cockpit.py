@@ -839,6 +839,14 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
     def get_representations_for(self, feedback: DECK_FEEDBACK):
         return [a for a in self.all_representations.values() if feedback in a.get_required_capability()]
 
+    def get_activation_schemas(self) -> list[dict]:
+        schemas = [schema for _name, cls in self.all_activations.items() if hasattr(cls, "editor_schema") for schema in [cls.editor_schema()]]
+        return sorted(schemas, key=lambda schema: (schema.get("family", ""), schema.get("label", schema.get("name", "")), schema.get("name", "")))
+
+    def get_representation_schemas(self) -> list[dict]:
+        schemas = [schema for _name, cls in self.all_representations.items() if hasattr(cls, "editor_schema") for schema in [cls.editor_schema()]]
+        return sorted(schemas, key=lambda schema: (schema.get("family", ""), schema.get("label", schema.get("name", "")), schema.get("name", "")))
+
     # #########################################################
     # Initialisation
     #
@@ -1731,7 +1739,12 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
 
     # Getters
     def get_deck_type(self, name: str):
-        return self.deck_types.get(name)
+        deck_type = self.deck_types.get(name)
+        if deck_type is not None:
+            return deck_type
+        if self.aircraft is not None and hasattr(self.aircraft, "deck_types"):
+            return self.aircraft.deck_types.get(name)
+        return None
 
     def get_observable(self, name) -> Observable | None:
         # First, search in Cockpit

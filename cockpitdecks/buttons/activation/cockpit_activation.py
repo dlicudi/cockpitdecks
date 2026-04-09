@@ -37,6 +37,8 @@ class CockpitActivation(Activation):
 
 
 class LoadPage(Activation):
+    EDITOR_FAMILY = "Page"
+    EDITOR_LABEL = "Load Page"
     """
     Defines a Page change activation.
     """
@@ -87,6 +89,8 @@ class LoadPage(Activation):
 
 
 class LoadPageCycle(Activation, EncoderProperties):
+    EDITOR_FAMILY = "Page"
+    EDITOR_LABEL = "Cycle Pages"
     """
     Defines a Page cycle activation for encoders.
     Rotating the encoder cycles through a defined list of pages.
@@ -208,6 +212,8 @@ class LoadPageCycle(Activation, EncoderProperties):
 
 
 class Reload(Activation):
+    EDITOR_FAMILY = "System"
+    EDITOR_LABEL = "Reload"
     """
     Reloads all decks.
     """
@@ -250,6 +256,8 @@ class Reload(Activation):
 
 
 class ChangeTheme(Activation):
+    EDITOR_FAMILY = "System"
+    EDITOR_LABEL = "Theme"
     """
     Reloads all decks.
     """
@@ -294,6 +302,8 @@ class ChangeTheme(Activation):
 
 
 class Inspect(Activation):
+    EDITOR_FAMILY = "System"
+    EDITOR_LABEL = "Inspect"
     """
     Inspect all decks.
     """
@@ -338,6 +348,8 @@ class Inspect(Activation):
 
 
 class Stop(Activation):
+    EDITOR_FAMILY = "System"
+    EDITOR_LABEL = "Stop"
     """
     Stops all decks.
     """
@@ -372,6 +384,8 @@ class Stop(Activation):
 
 
 class StartSimulator(Activation):
+    EDITOR_FAMILY = "System"
+    EDITOR_LABEL = "Start Simulator"
     """
     Starts local copy of simulator software if not running.
     Currently only works on MacOS.
@@ -416,6 +430,8 @@ class StartSimulator(Activation):
 
 
 class Obs(Activation):
+    EDITOR_FAMILY = "System"
+    EDITOR_LABEL = "Observable"
     """
     Execute observable instruction (to enable, disable)
     """

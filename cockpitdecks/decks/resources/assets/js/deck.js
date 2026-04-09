@@ -349,8 +349,12 @@ class LiveDeck {
     // ── Sizing ─────────────────────────────────────────────────────────────────
 
     _applySize(w, h) {
-        this.canvas.width  = w;
-        this.canvas.height = h;
+        const dpr = window.devicePixelRatio || 1;
+        this.canvas.width = Math.round(w * dpr);
+        this.canvas.height = Math.round(h * dpr);
+        this.canvas.style.width = `${w}px`;
+        this.canvas.style.height = `${h}px`;
+        this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         if (typeof window.cockpitdecksSetDeckSize === 'function') {
             window.cockpitdecksSetDeckSize(w, h);
         }
@@ -361,8 +365,9 @@ class LiveDeck {
 
     _redrawAll() {
         const ctx = this.ctx;
+        ctx.clearRect(0, 0, this._canvasW, this._canvasH);
         ctx.fillStyle = this._bgColor;
-        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        ctx.fillRect(0, 0, this._canvasW, this._canvasH);
         for (const key of Object.keys(this._images)) {
             this._blitButton(key);
         }
@@ -404,9 +409,9 @@ class LiveDeck {
 
     _canvasXY(e) {
         const rect = this.canvas.getBoundingClientRect();
-        const sx = this.canvas.width  / rect.width;
-        const sy = this.canvas.height / rect.height;
         const src = e.touches ? e.touches[0] : e;
+        const sx = this._canvasW / rect.width;
+        const sy = this._canvasH / rect.height;
         return [(src.clientX - rect.left) * sx, (src.clientY - rect.top) * sy];
     }
 

@@ -72,33 +72,6 @@ body {
   display: block;
 }
 
-#buttonWrapper {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  display: flex;
-  gap: 8px;
-  padding: 8px;
-  border-radius: 14px;
-  background: var(--panel-color);
-  border: 1px solid var(--panel-border);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  z-index: 10;
-}
-
-input[type="button"] {
-  padding: 0;
-  width: 36px;
-  height: 36px;
-  border: 1px solid var(--bg-color);
-  margin: 0;
-  border-radius: 10px;
-  color: var(--font-color);
-  background-color: var(--bg-color);
-  font-size: 18px;
-  line-height: 1;
-}
 </style>
 </head>
 <body>
@@ -154,60 +127,8 @@ window.cockpitdecksSetDeckSize = function(w, h) {
 
 const deck = new LiveDeck(canvas, DECK);
 
-//
-// Zoom controls
-//
-const btns_elem = document.createElement("div");
-btns_elem.setAttribute("id", "buttonWrapper");
-btns_elem.setAttribute("data-theme", "light");
-
-if (ZOOM) {
-    const scale_delta = 0.1;
-    const ZOOM_MIN = 0.5, ZOOM_MAX = 2.5;
-
-    const plus_elem = document.createElement("input");
-    plus_elem.setAttribute("type", "button");
-    plus_elem.setAttribute("value", "+");
-    plus_elem.addEventListener("click", function() {
-        zoom_factor = Math.min(ZOOM_MAX, zoom_factor + scale_delta);
-        apply_viewport_layout();
-    });
-
-    const minus_elem = document.createElement("input");
-    minus_elem.setAttribute("type", "button");
-    minus_elem.setAttribute("value", "-");
-    minus_elem.addEventListener("click", function() {
-        zoom_factor = Math.max(ZOOM_MIN, zoom_factor - scale_delta);
-        apply_viewport_layout();
-    });
-
-    btns_elem.appendChild(plus_elem);
-    btns_elem.appendChild(minus_elem);
-}
-
-//
-// Dark mode toggle (colour-only — no hardware background image)
-//
-if (DARK) {
-    var dark_mode = DECK.dark_mode == undefined ? false : DECK.dark_mode;
-    const dark_elem = document.createElement("input");
-    dark_elem.setAttribute("type", "button");
-    dark_elem.setAttribute("value", dark_mode ? "☀" : "☾");
-    dark_elem.addEventListener("click", function() {
-        dark_mode = !dark_mode;
-        dark_elem.setAttribute("value", dark_mode ? "☀" : "☾");
-        btns_elem.setAttribute("data-theme", dark_mode ? "dark" : "light");
-        deck.set_background_image(null, dark_mode ? BACKGROUND_COLOR_ALT : null);
-    });
-    btns_elem.appendChild(dark_elem);
-
-    if (dark_mode) {
-        deck.set_background_image(null, BACKGROUND_COLOR_ALT);
-    }
-}
-
-if (btns_elem.firstChild) {
-    document.getElementById("app").appendChild(btns_elem);
+if (DARK && DECK.dark_mode) {
+    deck.set_background_image(null, BACKGROUND_COLOR_ALT);
 }
 
 window.addEventListener("resize", apply_viewport_layout);
@@ -228,6 +149,7 @@ if (DEBUG) {
 // WebSocket
 //
 const WS_CONNECT_RETRY_TIME = 5000;
+const WS_STALE_TIMEOUT_MS = 15000;
 
 if (DECK.ws_url == undefined) {
     console.error("No WebSocket address. Please start Cockpitdecks first.");
@@ -246,19 +168,49 @@ function sendEvent(deckName, key, value, data) {
 }
 
 var ws;
+var ws_retry_timer = null;
+var ws_health_timer = null;
+var ws_last_activity_at = 0;
+
+function scheduleReconnect(delay = WS_CONNECT_RETRY_TIME) {
+    if (ws_retry_timer) return;
+    ws_retry_timer = setTimeout(function() {
+        ws_retry_timer = null;
+        connect();
+    }, delay);
+}
+
+function resetHealthTimer(socket) {
+    ws_last_activity_at = Date.now();
+    if (ws_health_timer) clearTimeout(ws_health_timer);
+    ws_health_timer = setTimeout(function() {
+        const stale = Date.now() - ws_last_activity_at >= WS_STALE_TIMEOUT_MS;
+        if (!stale) {
+            resetHealthTimer(socket);
+            return;
+        }
+        console.warn("WebSocket stale, forcing reconnect");
+        try { socket.close(); } catch(e) { console.error("close stale socket", e); }
+        if (ws === socket) ws = false;
+        scheduleReconnect(250);
+    }, WS_STALE_TIMEOUT_MS);
+}
 
 function connect() {
     if (!DECK.ws_url) { console.error("No WebSocket URL — Cockpitdecks not running?"); return; }
+    if (ws && ws.readyState !== WebSocket.CLOSED) return;
     console.log("WebSocket trying every " + Math.round(WS_CONNECT_RETRY_TIME/1000) + " seconds...");
     var socket = new WebSocket(DECK.ws_url);
 
     socket.onopen = function(event) {
         console.log("WebSocket opened", DECK.ws_url);
         ws = socket;
+        resetHealthTimer(socket);
         try { if (ws) sendCode(DECK.name, 1); } catch(e) { console.error("onopen", e); }
     };
 
     socket.onmessage = function(event) {
+        resetHealthTimer(socket);
         let data;
         try { data = JSON.parse(event.data); } catch(e) {
             console.error("invalid websocket payload", e);
@@ -279,16 +231,26 @@ function connect() {
     };
 
     socket.onclose = function() {
-        ws = false;
-        setTimeout(connect, WS_CONNECT_RETRY_TIME);
+        if (ws_health_timer) {
+            clearTimeout(ws_health_timer);
+            ws_health_timer = null;
+        }
+        if (ws === socket) ws = false;
+        scheduleReconnect();
     };
 
     socket.onerror = function() {
+        resetHealthTimer(socket);
         if (socket) socket.close();
     };
 }
 
 connect();
+document.addEventListener("visibilitychange", function() {
+    if (!document.hidden && (!ws || ws.readyState === WebSocket.CLOSED)) {
+        scheduleReconnect(250);
+    }
+});
 </script>
 </body>
 </html>

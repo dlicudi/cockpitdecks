@@ -240,6 +240,8 @@ class VirtualDeck(DeckWithIcons):
         # Image is sent as a stream of bytes which is the file content of the image saved in PNG format
         # Need to supply deck name as well.
         def add_corners(im, rad):
+            if rad <= 0:
+                return im
             circle = Image.new("L", (rad * 2, rad * 2), 0)
             draw = ImageDraw.Draw(circle)
             draw.ellipse((0, 0, rad * 2 - 1, rad * 2 - 1), fill=255)
@@ -282,6 +284,8 @@ class VirtualDeck(DeckWithIcons):
 
     def _send_hardware_key_image_to_device(self, key, image, metadata):
         def add_corners(im, rad):
+            if rad <= 0:
+                return im
             circle = Image.new("L", (rad * 2, rad * 2), 0)
             draw = ImageDraw.Draw(circle)
             draw.ellipse((0, 0, rad * 2 - 1, rad * 2 - 1), fill=255)

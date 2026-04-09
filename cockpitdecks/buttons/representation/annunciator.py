@@ -276,7 +276,11 @@ class AnnunciatorPart:
             # Annunciator part will display text
             #
             font_started_at = time.perf_counter()
-            font = self.annunciator.get_font(self._display.font, self._display.size)
+            # Keep annunciator text sizing proportional to the rendered button size.
+            # Raw pixel sizes make the same numeric value look far smaller than labels
+            # on high-resolution virtual decks.
+            font_size = max(1, int(self._display.size * icon_size / 72))
+            font = self.annunciator.get_font(self._display.font, font_size)
             font_duration_ms = (time.perf_counter() - font_started_at) * 1000.0
 
             should_render = state["lit"] or self.annunciator.annunciator_style != ANNUNCIATOR_STYLES.VIVISUN or self.renders_unlit()
@@ -428,6 +432,8 @@ class AnnunciatorPart:
 class Annunciator(DrawBase):
 
     REPRESENTATION_NAME = "annunciator"
+    EDITOR_FAMILY = "Annunciator"
+    EDITOR_LABEL = "Annunciator"
 
     PARAMETERS_ORIG = {
         "icon": {"type": "icon", "prompt": "Icon"},
@@ -501,6 +507,12 @@ class Annunciator(DrawBase):
             },  # part
         },  # annunciator-parts
     }
+
+    @classmethod
+    def editor_schema(cls) -> dict:
+        schema = super().editor_schema()
+        schema["models"] = {"A": 1, "B": 2, "C": 2, "D": 3, "E": 3, "F": 4}
+        return schema
 
     def __init__(self, button: "Button"):
         self.button = button  # we need the reference before we call Icon.__init__()...

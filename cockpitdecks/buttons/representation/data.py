@@ -21,6 +21,8 @@ logger = logging.getLogger(__name__)
 class DataIcon(DrawBase):
 
     REPRESENTATION_NAME = "data"
+    EDITOR_FAMILY = "Data / Readout"
+    EDITOR_LABEL = "Data"
 
     PARAMETERS = {
         "top-line-color": {"type": "color", "prompt": "Top line color"},
