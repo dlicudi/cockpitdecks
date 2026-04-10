@@ -217,7 +217,10 @@ function connect() {
             return;
         }
         if (data.code == 0) {
+            if (data.span) { deck.set_key_span(data.key, data.span); }
             deck.set_key_image(data.key, data.image);
+        } else if (data.code == 1) {
+            deck.clear_images();
         } else if (data.code == 2) {
             deck.play_sound(data.sound, data.type);
         } else if (data.code == 8) {

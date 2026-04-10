@@ -104,6 +104,9 @@ class VirtualDeck(DeckWithIcons):
 
     def change_page(self, page: str | None = None) -> str | None:
         if self.has_clients():
+            # Tell clients to clear their image cache before new page images arrive.
+            # WebSocket guarantees in-order delivery, so this clears before code 0 messages.
+            self.cockpit.send(deck=self.name, payload={"code": 1, "deck": self.name, "meta": {"ts": datetime.now().timestamp()}})
             return super().change_page(page=page)
         logger.info(f"web deck {self.name} has no client")
         return None
@@ -235,7 +238,7 @@ class VirtualDeck(DeckWithIcons):
         payload = {"code": 2, "deck": self.name, "sound": base64.b64encode(content).decode("ascii"), "type": typ, "meta": meta}
         self.cockpit.send(deck=self.name, payload=payload)
 
-    def set_key_icon(self, key, image):
+    def set_key_icon(self, key, image, span=None):
         # Sends the PIL Image bytes with a few meta to Flask for web display
         # Image is sent as a stream of bytes which is the file content of the image saved in PNG format
         # Need to supply deck name as well.
@@ -271,6 +274,10 @@ class VirtualDeck(DeckWithIcons):
         content = img_byte_arr.getvalue()
         meta = {"ts": datetime.now().timestamp()}  # dummy
         payload = {"code": 0, "deck": self.name, "key": key, "image": base64.b64encode(content).decode("ascii"), "meta": meta}
+        if span is not None and isinstance(span, (list, tuple)) and len(span) == 2:
+            sw, sh = int(span[0]), int(span[1])
+            if sw != 1 or sh != 1:
+                payload["span"] = [sw, sh]
         self.cockpit.send(deck=self.name, payload=payload)
 
     def fill_empty_hardware_representation(self, key, page):
@@ -336,10 +343,12 @@ class VirtualDeck(DeckWithIcons):
             logger.warning(f"no image for default icon {default_icon_name}")
             return
 
-        if image.size != self.get_image_size(button.index):
-            image.thumbnail(self.get_image_size(button.index))
+        target_size = self.get_spanned_image_size(button) or self.get_image_size(button.index)
+        if target_size and image.size != target_size:
+            image = image.resize(target_size, resample=Image.Resampling.LANCZOS)
 
-        self.set_key_icon(button.index, image)
+        span = getattr(button, "_config", {}).get("span")
+        self.set_key_icon(button.index, image, span=span)
 
     def _set_hardware_image(self, button: Button):  # idx: int, image: str, label: str = None):
         if self.device is None:

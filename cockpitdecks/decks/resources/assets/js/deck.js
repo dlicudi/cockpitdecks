@@ -112,6 +112,32 @@ class LiveDeck {
         img.src = 'data:image/jpeg;base64,' + base64jpeg;
     }
 
+    clear_images() {
+        this._images = {};
+        // Reset any span mutations so buttons that shrink back to 1×1 on the
+        // new page aren't drawn at the previous page's larger dimensions.
+        // The server only sends span when > [1,1], so without this the old
+        // larger layout.w/h would persist and stretch the new image into
+        // adjacent squares, or leave old pixels uncovered.
+        for (const [key, base] of Object.entries(this._baseLayout)) {
+            if (this._layout[key]) {
+                this._layout[key].w = base.w;
+                this._layout[key].h = base.h;
+            }
+        }
+        this._redrawAll();
+    }
+
+    set_key_span(key, span) {
+        const layout = this._layout[key];
+        if (!layout || !Array.isArray(span) || span.length !== 2) return;
+        const [sw, sh] = span;
+        const tileW = this._tileW || 90;
+        const tileH = this._tileH || 90;
+        layout.w = sw * tileW + (sw - 1) * GAP;
+        layout.h = sh * tileH + (sh - 1) * GAP;
+    }
+
     /** Hardware background image is not used — just accept the colour hint. */
     set_background_image(imageUrl, fallbackColor) {
         if (fallbackColor && fallbackColor !== this._bgColor) {
@@ -172,6 +198,8 @@ class LiveDeck {
             ? gridBtns[0].dimension[0] : 90;
         const tileH = gridBtns.length && Array.isArray(gridBtns[0].dimension)
             ? gridBtns[0].dimension[1] : 90;
+        this._tileW = tileW;
+        this._tileH = tileH;
 
         const gridW = nCols * tileW + (nCols - 1) * GAP;
         const gridH = nRows * tileH + (nRows - 1) * GAP;
@@ -228,10 +256,12 @@ class LiveDeck {
                 col = idx % nCols;
                 row = Math.floor(idx / nCols);
             }
+            const btnW = Array.isArray(btn.dimension) ? btn.dimension[0] : tileW;
+            const btnH = Array.isArray(btn.dimension) ? btn.dimension[1] : tileH;
             this._layout[btn.name] = {
                 x: gridStartX + col * (tileW + GAP),
                 y: gridStartY + row * (tileH + GAP),
-                w: tileW, h: tileH,
+                w: btnW, h: btnH,
             };
         });
 
@@ -343,6 +373,13 @@ class LiveDeck {
 
         this._canvasW = canvasW;
         this._canvasH = canvasH;
+
+        // Snapshot original w/h so clear_images() can reset span mutations.
+        this._baseLayout = {};
+        for (const [key, r] of Object.entries(this._layout)) {
+            this._baseLayout[key] = { w: r.w, h: r.h };
+        }
+
         this._applySize(canvasW, canvasH);
     }
 
