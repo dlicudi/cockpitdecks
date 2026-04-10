@@ -271,7 +271,7 @@ class Activation(ActivationBase, VariableListener):
         # Long press option
         self._long_press = None
         self.long_time = self._config.get("long-time", 2)
-        long_press = self._config.get(CONFIG_KW.LONG_PRESS.value)
+        long_press = self._config.get("commands", {}).get(CONFIG_KW.LONG_PRESS.value)
         if long_press is not None:  # a long-press is just a command that gets executed when pressed for a long time
             self._long_press = self.sim.instruction_factory(
                 name=cmdname + ":long-press", instruction_block={CONFIG_KW.COMMAND.value: long_press}

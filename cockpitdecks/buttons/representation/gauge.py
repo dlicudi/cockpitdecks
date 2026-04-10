@@ -447,10 +447,9 @@ class GaugeIcon(DrawBase):
                 else:  # 0, 180, 360
                     anchor = "ms"
                     align = "center"
-                # print(self.tick_labels[i], label_anchors[i], label_anchors[i][1:3], anchor, align)
                 draw.text(
                     label_anchors[i][1:3],
-                    text=str(i),
+                    text=str(self.tick_labels[i]) if self.tick_labels and i < len(self.tick_labels) else str(i),
                     font=font,
                     anchor=anchor,
                     align=align,

@@ -334,8 +334,9 @@ class Deck(ABC):
             # Page includes
             if CONFIG_KW.INCLUDES.value in page_config:
                 includes = page_config[CONFIG_KW.INCLUDES.value]
-                if type(page_config[CONFIG_KW.INCLUDES.value]) is str:  # just one file
-                    includes = includes.split(",")
+                if not isinstance(includes, list):
+                    logger.warning(f"deck {self.name}: page {page_name}: 'includes' should be a YAML list, got {type(includes).__name__}")
+                    includes = [includes]
                 logger.debug(f"deck {self.name}: page {page_name} includes {includes}..")
                 ipb = 0
                 for inc in includes:
@@ -698,6 +699,29 @@ class DeckWithIcons(Deck):
         """Gets image size for deck button index"""
         button_def = self.deck_type.get_button_definition(index)
         return button_def.display_size()
+
+    def get_spanned_image_size(self, button):
+        """Gets image size for a button, expanding for span: [cols, rows] if present in button config."""
+        span = getattr(button, "_config", {}).get("span")
+        if not isinstance(span, (list, tuple)) or len(span) != 2:
+            return self.get_image_size(button.index)
+        sw, sh = max(1, int(span[0])), max(1, int(span[1]))
+        if sw == 1 and sh == 1:
+            return self.get_image_size(button.index)
+        base_def = self.deck_type.get_button_definition(button.index)
+        if base_def is None:
+            return self.get_image_size(button.index)
+        base_size = base_def.display_size()
+        if base_size is None:
+            return None
+        cw, ch = base_size
+        # Infer gap from the adjacent button's position
+        gx = gy = 0
+        next_def = self.deck_type.get_button_definition(button.index + 1)
+        if next_def is not None and next_def.position is not None and base_def.position is not None:
+            gx = next_def.position[0] - (base_def.position[0] + cw)
+            gy = gx  # assume square gap
+        return (sw * cw + (sw - 1) * gx, sh * ch + (sh - 1) * gy)
 
     def get_wallpaper(self, index):
         """Gets image size for deck button index"""

@@ -4,9 +4,9 @@ Button action and activation abstraction
 
 from .activation import Activation, ActivationValueProvider, ACTIVATION_VALUE
 from .cockpit_activation import LoadPage, LoadPageCycle, Reload, Inspect, Stop
-from .deck_activation import Push, OnOff, UpDown
+from .deck_activation import Push, Sweep
 from .deck_activation import BeginEndPress
-from .deck_activation import Encoder, EncoderPush, EncoderOnOff, EncoderValue, EncoderToggle
+from .deck_activation import Encoder, EncoderPush, EncoderToggle, EncoderValue, EncoderMode
 from .deck_activation import EncoderValueExtended
 from .deck_activation import Slider, Swipe
 

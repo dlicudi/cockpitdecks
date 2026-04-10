@@ -211,21 +211,21 @@ class Button(VariableListener, SimulatorVariableValueProvider, StateVariableValu
 
     @staticmethod
     def guess_activation_type(config):
-        a = config.get(CONFIG_KW.TYPE.value)
+        a = config.get(CONFIG_KW.ACTIVATION.value)
         if a is None or a == CONFIG_KW.NONE.value:
-            logger.debug("no type attribute, assuming type is none")
+            logger.debug("no activation attribute, assuming none")
             return CONFIG_KW.NONE.value
         return a
 
     @staticmethod
     def guess_representation_type(config, all_representations, all_hardware_representations):
-        a = [r for r in all_representations.keys() if r in config and r not in all_hardware_representations.keys()]
-        if len(a) == 1:
-            return a[0]
-        elif len(a) == 0:
-            logger.debug(f"no representation in \n{pformat(config)},\n assuming none, add representation: none to suppress warning message")
-        else:
-            logger.warning(f"multiple representations {a} found in {config}")
+        r = config.get(CONFIG_KW.REPRESENTATION.value)
+        if r is not None:
+            if r in all_representations and r not in all_hardware_representations:
+                return r
+            logger.warning(f"representation '{r}' not found or is a hardware representation")
+            return CONFIG_KW.NONE.value
+        logger.debug(f"no representation in \n{pformat(config)},\n assuming none")
         return CONFIG_KW.NONE.value
 
     @property

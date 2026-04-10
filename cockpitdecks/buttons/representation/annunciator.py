@@ -534,35 +534,31 @@ class Annunciator(DrawBase):
         self._part_iterator = None  # cache
         self.annunciator_parts: Dict[str, AnnunciatorPart] | None = None
         parts = self.annunciator.get("parts")
-        if parts is None:  # if only one annunciator
-            arr = {}
-            for part_name in self.part_iterator():
-                p = self.annunciator.get(part_name)
-                if p is not None:
-                    arr[part_name] = AnnunciatorPart(name=part_name, config=p, annunciator=self)
-            if len(arr) > 0:
-                ctrl = list(set([k[0] for k in arr.keys()]))
-                if len(ctrl) != 1:
-                    logger.error(f"button {self.button.name}: multiple annunciator models {ctrl}")
-                self.model = ctrl[0]
-                self.annunciator_parts = arr
-                logger.debug(f"button {self.button.name}: annunciator parts normalized ({list(self.annunciator_parts.keys())})")
-            else:
-                self.annunciator[CONFIG_KW.ANNUNCIATOR_MODEL.value] = ANNUNCIATOR_DEFAULT_MODEL
-                self.model = ANNUNCIATOR_DEFAULT_MODEL
-                arr[ANNUNCIATOR_DEFAULT_MODEL_PART] = AnnunciatorPart(
+        if parts is None:
+            # No parts defined: single-part annunciator using annunciator config itself
+            self.annunciator[CONFIG_KW.ANNUNCIATOR_MODEL.value] = ANNUNCIATOR_DEFAULT_MODEL
+            self.model = ANNUNCIATOR_DEFAULT_MODEL
+            self.annunciator_parts = {
+                ANNUNCIATOR_DEFAULT_MODEL_PART: AnnunciatorPart(
                     name=ANNUNCIATOR_DEFAULT_MODEL_PART,
                     config=self.annunciator,
                     annunciator=self,
                 )
-                self.annunciator_parts = arr
-                logger.debug(f"button {self.button.name}: annunciator has no part, assuming single {ANNUNCIATOR_DEFAULT_MODEL_PART} part")
+            }
+            logger.debug(f"button {self.button.name}: annunciator has no parts, assuming single {ANNUNCIATOR_DEFAULT_MODEL_PART} part")
+        elif isinstance(parts, list):
+            # New format: parts is an ordered list; names derived from model + index
+            model = self.annunciator.get(CONFIG_KW.ANNUNCIATOR_MODEL.value, ANNUNCIATOR_DEFAULT_MODEL)
+            self.model = model
+            self.annunciator_parts = {
+                f"{model}{i}": AnnunciatorPart(name=f"{model}{i}", config=p, annunciator=self)
+                for i, p in enumerate(parts)
+            }
+            logger.debug(f"button {self.button.name}: annunciator parts from list ({list(self.annunciator_parts.keys())})")
         else:
-            ctrl = list(set([k[0] for k in parts.keys()]))
-            if len(ctrl) != 1:
-                logger.error(f"button {self.button.name}: multiple annunciator models {ctrl}")
-            self.model = ctrl[0]
-            self.annunciator_parts = dict([(k, AnnunciatorPart(name=k, config=v, annunciator=self)) for k, v in parts.items()])
+            logger.warning(f"button {self.button.name}: annunciator 'parts' should be a list, got {type(parts).__name__}")
+            self.model = ANNUNCIATOR_DEFAULT_MODEL
+            self.annunciator_parts = {}
 
         # for a in [CONFIG_KW.SIM_VARIABLE.value, CONFIG_KW.FORMULA.value]:
         #     if a in button._config:

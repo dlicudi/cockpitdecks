@@ -197,7 +197,7 @@ buttons:
     commands:
       - none
       - none
-    formula: ${state:stop_current_value}
+    formula: ${state:stop_current}
   # - index: 8
   #   name: INSPECT DATAREFS
   #   label: DATAREF VALUES
