@@ -612,6 +612,7 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
         self.vd_ws_conn = {}
         self._vd_send_locks = {}
         self.vd_errs = []
+        self._ws_probe_timer = None
 
         # Global parameters that affect colors and deck LCD backlight
         self.global_luminosity = 1.0
@@ -2651,6 +2652,7 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
         self.vd_ws_conn[deck].append(websocket)
         logger.debug(f"{deck}: registration added ({len(self.vd_ws_conn[deck])})")
         logger.info(f"registered deck {deck}")
+        self._start_ws_probe_timer()
 
     def _cleanup_virtual_deck_clients(self, deck: str) -> list:
         client_list = self.vd_ws_conn.get(deck)
@@ -2716,6 +2718,9 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
         for deck in remove:
             self.vd_ws_conn.pop(deck, None)
             self._vd_send_locks.pop(deck, None)
+        if not self.vd_ws_conn and self._ws_probe_timer is not None:
+            self._ws_probe_timer.cancel()
+            self._ws_probe_timer = None
 
     def send(self, deck, payload) -> bool:
         sent = False
@@ -2758,6 +2763,23 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
                 "meta": {"ts": datetime.now().timestamp()},
             },
         )
+
+    WS_PROBE_INTERVAL_S = 10  # must be less than WS_STALE_TIMEOUT_MS (15s) in deck.j2
+
+    def _start_ws_probe_timer(self):
+        if self._ws_probe_timer is not None:
+            return  # already running
+        self._ws_probe_timer = threading.Timer(self.WS_PROBE_INTERVAL_S, self._ws_probe_tick)
+        self._ws_probe_timer.daemon = True
+        self._ws_probe_timer.start()
+
+    def _ws_probe_tick(self):
+        self._ws_probe_timer = None
+        connected = list(self.vd_ws_conn.keys())
+        for deck in connected:
+            self.probe(deck)
+        if self.vd_ws_conn:
+            self._start_ws_probe_timer()
 
     def refresh_deck(self, deck):
         payload = {"code": 1, "deck": deck, "meta": {"ts": datetime.now().timestamp()}}
