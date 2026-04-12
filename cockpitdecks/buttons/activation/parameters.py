@@ -4,22 +4,22 @@
 # COMMON
 #
 PARAM_DESCRIPTION = {
-    "name": {"type": "string", "label": "Name"},
-    "label": {"type": "string", "label": "Label"},
-    "label-size": {"type": "int", "label": "Lbl size"},
-    "label-font": {"type": "font", "label": "Lbl font", "default": "DIN.ttf"},
-    "label-position": {"type": "lov", "label": "Lbl position", "lov": ["lt", "ct", "rt", "lm", "cm", "rm", "lb", "cb", "rb"]},
-    "label-color": {"type": "color", "label": "Lbl color"},
+    "name": {"type": "string", "label": "Name", "hint": "Friendly name for internal identification", "group": "Identification", "required": True},
+    "label": {"type": "string", "label": "Label", "hint": "Top label shown on the button", "group": "Visuals"},
+    "label-size": {"type": "int", "label": "Lbl size", "hint": "Font size for the top label", "group": "Visuals"},
+    "label-font": {"type": "font", "label": "Lbl font", "default": "DIN.ttf", "hint": "Font file to use for the label", "group": "Visuals"},
+    "label-position": {"type": "lov", "label": "Lbl position", "lov": ["lt", "ct", "rt", "lm", "cm", "rm", "lb", "cb", "rb"], "hint": "Alignment of the label on the button", "group": "Visuals"},
+    "label-color": {"type": "color", "label": "Lbl color", "hint": "Color for the label text", "group": "Visuals"},
 }
 
 PARAM_INITIAL_VALUE = {
-    "initial-value": {"type": "integer", "label": "Initial value"},
-    "option": {"type": "string", "label": "Options (!coded string!)"},
+    "initial-value": {"type": "integer", "label": "Initial value", "hint": "Starting value/state for this button", "group": "Logic"},
+    "option": {"type": "string", "label": "Options", "hint": "Comma-separated special behavior flags (e.g., '3way', 'invert')", "group": "Logic"},
 }
 
 PARAM_DECK = {
-    "sound": {"label": "Sound", "type": "sound"},
-    "vibrate": {"label": "Vibrate", "type": "string"},
+    "sound": {"label": "Sound", "type": "sound", "hint": "Sound file to play on activation", "group": "Effects"},
+    "vibrate": {"label": "Vibrate", "type": "string", "hint": "Haptic feedback pattern (for supported decks)", "group": "Effects"},
 }
 
 # ######################
@@ -27,22 +27,22 @@ PARAM_DECK = {
 #
 # COMMON BLOCKS
 PARAM_COMMAND_BLOCK = {
-    "command": {"type": "string", "label": "Command"},
-    "set-dataref": {"type": "string", "label": "Set Simulator Value"},
-    "delay": {"type": "string", "label": "Delay"},
-    "condition": {"type": "string", "label": "Condition"},
+    "command": {"type": "string", "label": "Command", "hint": "Simulator command path (e.g., sim/annun/test)", "group": "Execution", "required": True},
+    "set-dataref": {"type": "string", "label": "Set Simulator Value", "hint": "Update a dataref value directly", "group": "Execution"},
+    "delay": {"type": "string", "label": "Delay", "hint": "Time in seconds before execution (can be formula)", "group": "Execution"},
+    "condition": {"type": "string", "label": "Condition", "hint": "Only execute if this formula evaluates to true", "group": "Execution"},
 }
 
 PARAM_SETVALUE_BLOCK = {
-    "set-dataref": {"type": "string", "label": "Set Simulator Value"},
-    "delay": {"type": "string", "label": "Delay"},
-    "condition": {"type": "string", "label": "Condition"},
+    "set-dataref": {"type": "string", "label": "Set Simulator Value", "hint": "Update a dataref value directly"},
+    "delay": {"type": "string", "label": "Delay", "hint": "Time in seconds before execution (can be formula)"},
+    "condition": {"type": "string", "label": "Condition", "hint": "Only execute if this formula evaluates to true"},
 }
 
 PARAM_PUSH_AUTOREPEAT = {
-    "auto-repeat": {"type": "boolean", "label": "Auto-repeat"},
-    "auto-repeat-delay": {"type": "float", "label": "Auto-repeat delay", "hint": "Delay after press before repeat"},
-    "auto-repeat-speed": {"type": "float", "label": "Auto-repeat speed", "hint": "Speed of repeat"},
+    "auto-repeat": {"type": "boolean", "label": "Auto-repeat", "hint": "Keep triggering the command while held", "group": "Logic"},
+    "auto-repeat-delay": {"type": "float", "label": "Auto-repeat delay", "hint": "Delay in seconds before repeat starts", "group": "Logic"},
+    "auto-repeat-speed": {"type": "float", "label": "Auto-repeat speed", "hint": "Repeats per second", "group": "Logic"},
 }
 
 # list on nov. 2025

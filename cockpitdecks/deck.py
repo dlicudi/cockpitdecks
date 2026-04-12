@@ -36,6 +36,12 @@ class Deck(ABC):
 
     DECK_NAME = "none"
     DEVICE_MANAGER = None
+    _REPRESENTATION_DEFAULT_BLOCKS = {
+        "switch",
+        "push-switch",
+        "circular-switch",
+        "knob",
+    }
 
     def __init__(self, name: str, config: dict, cockpit: "Cockpit", device=None):
         self._config = config  # content of aircraft/deckconfig/config.yaml decks attributes for this deck
@@ -528,6 +534,73 @@ class Deck(ABC):
     #
     # Deck Specific Functions : Rendering
     #
+    _NESTED_BUTTON_FLAT_KEYS = {
+        CONFIG_KW.ACTIVATION.value,
+        CONFIG_KW.REPRESENTATION.value,
+        CONFIG_KW.COMMANDS.value,
+        CONFIG_KW.PAGE.value,
+        "pages",
+        CONFIG_KW.DECK.value,
+        CONFIG_KW.LABEL.value,
+        "label-color",
+        "label-size",
+        "label-font",
+        "label-position",
+        CONFIG_KW.TEXT.value,
+        "text-color",
+        "text-size",
+        "text-font",
+        "text-position",
+        "text-format",
+        CONFIG_KW.FORMULA.value,
+        "annunciator",
+        "gauge",
+        "display",
+    }
+
+    def normalize_button_config(self, config: dict) -> dict:
+        """Normalize nested clean-schema button config into the runtime flat shape."""
+        if not isinstance(config, dict):
+            return config
+
+        normalized = dict(config)
+
+        activation_cfg = normalized.get(CONFIG_KW.ACTIVATION.value)
+        if isinstance(activation_cfg, dict):
+            normalized.pop(CONFIG_KW.ACTIVATION.value, None)
+            activation_type = str(activation_cfg.get(CONFIG_KW.TYPE.value) or "").strip()
+            if activation_type:
+                normalized[CONFIG_KW.ACTIVATION.value] = activation_type
+            for key, value in activation_cfg.items():
+                if key == CONFIG_KW.TYPE.value:
+                    continue
+                normalized[key] = value
+
+        representation_cfg = normalized.get(CONFIG_KW.REPRESENTATION.value)
+        if isinstance(representation_cfg, dict):
+            normalized.pop(CONFIG_KW.REPRESENTATION.value, None)
+            representation_type = str(representation_cfg.get(CONFIG_KW.TYPE.value) or "").strip()
+            if representation_type:
+                normalized[CONFIG_KW.REPRESENTATION.value] = representation_type
+            for key, value in representation_cfg.items():
+                if key == CONFIG_KW.TYPE.value:
+                    continue
+                normalized[key] = value
+
+        representation_type = normalized.get(CONFIG_KW.REPRESENTATION.value)
+        if representation_type in self._REPRESENTATION_DEFAULT_BLOCKS and normalized.get(representation_type) is None:
+            normalized[representation_type] = {}
+
+        return normalized
+
+    def preprocess_buttons(self, buttons: list, page: "Page") -> list:
+        """Hook for decks to transform raw button config before build.
+
+        The default implementation normalizes nested activation/representation
+        objects into the runtime flat shape and otherwise returns the list unchanged.
+        """
+        return [self.normalize_button_config(button) if isinstance(button, dict) else button for button in buttons]
+
     def requires_sequential_button_rendering_on_free_threaded_python(self) -> bool:
         return False
 
@@ -917,10 +990,25 @@ class DeckWithIcons(Deck):
         if not built:
             logger.error(f"button designer: could not build preview button for deck {self.name}")
             return None
-        button: Button = built[0]
-        representation = button._representation
-        if not isinstance(representation, IconBase):
-            logger.warning(f"button: representation is not an image ({type(representation)})")
+        original_index = str(config.get("index"))
+
+        # Prefer a directly renderable button, but fall back to synthesized preview
+        # buttons produced by deck-specific preprocessors. This is required for
+        # Loupedeck encoder configs where an e0-e5 encoder with display: metadata
+        # expands into a synthetic left/right side-screen button.
+        preferred = None
+        fallback = None
+        for button in built:
+            if isinstance(button._representation, IconBase):
+                if str(button.index) == original_index:
+                    preferred = button
+                    break
+                if fallback is None:
+                    fallback = button
+
+        button = preferred or fallback
+        if button is None:
+            logger.warning("button: no image-capable preview button produced")
             return None
         return button
 

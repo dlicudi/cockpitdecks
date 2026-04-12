@@ -148,6 +148,7 @@ class CircularSwitch(SwitchBase):
     EDITOR_LABEL = "Circular Switch"
 
     REPRESENTATION_NAME = "circular-switch"
+    EDITOR_HINT = "Circular selector switch (rotary) with graduation marks and labels"
 
     PARAMETERS = SwitchBase.PARAMETERS | PARAM_BTN_CIRCULAR_SWITCH
 
@@ -448,6 +449,7 @@ class CircularSwitch(SwitchBase):
 class Switch(SwitchBase):
 
     REPRESENTATION_NAME = "switch"
+    EDITOR_HINT = "Standard toggle or selector switch with a base and handle"
     EDITOR_FAMILY = "Switch"
     EDITOR_LABEL = "Switch"
 

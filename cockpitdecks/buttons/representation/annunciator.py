@@ -854,6 +854,7 @@ class AnnunciatorAnimate(Annunciator):
     """ """
 
     REPRESENTATION_NAME = "annunciator-animate"
+    EDITOR_LABEL = "Annunciator (Animate)"
 
     PARAMETERS = {"speed": {"type": "integer", "prompt": "Speed (seconds)"}, "icon-off": {"type": "icon", "prompt": "Icon when off"}}
 

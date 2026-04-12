@@ -35,7 +35,6 @@ import ruamel
 from ruamel.yaml import YAML
 
 from cockpitdecks import __NAME__, __version__, __COPYRIGHT__, __DESCRIPTION__, Config, LOGFILE, FORMAT
-from cockpitdecks.constant import CONFIG_FOLDER, RESOURCES_FOLDER, DESIGNER_CONFIG_FILE
 from cockpitdecks.constant import ENVIRON_KW, CONFIG_KW, DECK_KW, DECKS_FOLDER, DECK_TYPES, TEMPLATE_FOLDER, ASSET_FOLDER, AUTOSAVE_FILE
 from cockpitdecks.cockpit import Cockpit
 from cockpitdecks.aircraft import DECK_TYPE_DESCRIPTION
@@ -621,6 +620,14 @@ def start_cockpit_runtime() -> None:
         cockpit.start_aircraft(acpath=start_acpath, release=release_to_startup, mode=mode.value)
         logger.info(f"..{start_desc} running..")
         set_runtime_state("running", f"{start_desc} running")
+        base_url = f"http://{APP_HOST[0]}:{APP_HOST[1]}"
+        if cockpit is not None and cockpit.virtual_decks:
+            logger.info(f"web decks available at {base_url}:")
+            print(f"Web decks available:")
+            for deck_name in cockpit.virtual_decks:
+                url = f"{base_url}/deck/{deck_name}"
+                logger.info(f"  {deck_name}: {url}")
+                print(f"  {deck_name}: {url}")
     except Exception as exc:
         logger.exception("Cockpitdecks startup failed")
         set_runtime_state("failed", "Startup failed", error=str(exc))
@@ -649,138 +656,77 @@ def send_aircraft_asset(path):
 
 # Designers
 #
+def legacy_designer_removed():
+    return {
+        "error": "legacy web designer removed",
+        "message": "Use cockpitdecks-editor for button and deck editing.",
+    }, 410
+
+
 @app.route("/designer")
 def designer():
-    return render_template("designer.j2", image_list=cockpit.get_deck_background_images())
+    return legacy_designer_removed()
 
 
 # Button designer
 #
 @app.route("/button-designer", methods=("GET", "POST"))
 def button_designer():
-    if request.method == "POST":
-        return cockpit.render_button(request.json)
-    return render_template("button-designer.j2", assets=cockpit.get_assets())
+    return legacy_designer_removed()
 
 
 @app.route("/deck-indices", methods=("GET", "POST"))
 def deck_indices():
-    name = request.args.get("name")
-    return cockpit.get_deck_indices(name)
+    return legacy_designer_removed()
 
 
 @app.route("/button-details", methods=("GET", "POST"))
 def button_details():
-    deck = request.args.get("deck")
-    index = request.args.get("index")
-    return cockpit.get_button_details(deck, index)
+    return legacy_designer_removed()
 
 
 @app.route("/activation", methods=("GET", "POST"))
 def activation_details():
-    name = request.args.get("name")
-    return cockpit.get_activation_parameters(name)
+    return legacy_designer_removed()
 
 
 @app.route("/representation", methods=("GET", "POST"))
 def representation_details():
-    name = request.args.get("name")
-    return cockpit.get_representation_parameters(name)
+    return legacy_designer_removed()
 
 
 @app.route("/load-button", methods=("GET", "POST"))
 def button_definition():
-    deck = request.args.get("deck")
-    layout = request.args.get("layout")
-    page = request.args.get("page")
-    index = request.args.get("index")
-    return cockpit.load_button(deck, layout, page, index)
+    return legacy_designer_removed()
 
 
 # Button designer - SVELTE
 #
 @app.route("/aircraft-list", methods=("GET", "POST"))
 def aircraft_list():
-    print("yup")
-    l = cockpit.get_aircraft_list()
-    print("yup2", l)
-    return l
+    return legacy_designer_removed()
 
 
 @app.route("/capabilities", methods=("GET", "POST"))
 def capabilities():
-    l = cockpit.get_capabilities()
-    return l
+    return legacy_designer_removed()
 
 
 @app.route("/preview", methods=("GET", "POST"))  # alias to button-designer
 def preview():
-    if request.method == "POST":
-        return cockpit.render_button(request.json)
-    return {"error": "use POST requests only"}
+    return legacy_designer_removed()
 
 
 # Deck designer
 #
 @app.route("/deck-designer")
 def deck_designer():
-    background_image = request.args.get("background_image", default="background.png")
-    deck_config = {"deck-type-flat": {"background": {"image": background_image}, "aircraft": background_image.startswith("/aircraft")}}
-
-    designer_config = {}
-    designer_config_file = os.path.abspath(os.path.join(get_aircraft_home(), CONFIG_FOLDER, RESOURCES_FOLDER, DECKS_FOLDER, DESIGNER_CONFIG_FILE))
-    if os.path.exists(designer_config_file):
-        with open(designer_config_file, "r", encoding="utf-8") as fp:
-            designer_config = yaml.load(fp)
-
-    return render_template("deck-designer.j2", deck=deck_config, designer_config=designer_config)
+    return legacy_designer_removed()
 
 
 @app.route("/deck-designer-io", methods=("GET", "POST"))
 def button_designer_io():
-    if request.method == "POST":
-
-        data = request.json
-        if CONFIG_FOLDER not in data:
-            return {"status": "no deckconfig"}
-        if CODE not in data:
-            return {"status": "no code"}
-        if CONFIG_KW.NAME.value not in data[CONFIG_FOLDER]:
-            return {"status": "no name"}
-
-        aircraft_deck_types = get_aircraft_deck_types_folder()
-        if not os.path.exists(aircraft_deck_types):
-            os.makedirs(aircraft_deck_types, exist_ok=True)
-
-        name = data[CONFIG_FOLDER].get(CONFIG_KW.NAME.value)
-        fn = os.path.join(aircraft_deck_types, name + ".json")
-        with open(fn, "w") as fp:
-            json.dump(data[CODE], fp, indent=2)
-            logger.info(f"Konva saved ({fn})")
-
-        savename = AUTOSAVE_FILE if name == "autosave" else name + ".yaml"  # autosave is hardcoded keywork in javascript deck designer
-        ln = os.path.join(aircraft_deck_types, savename )
-        with open(ln, "w") as fp:
-            yaml.dump(data[CONFIG_FOLDER], fp)
-            logger.info(f"layout saved ({ln})")
-
-        cockpit.save_deck(name)
-
-        return {"status": "ok"}
-
-    code = {}
-    args = request.args
-    name = args.get("name")
-    if name is not None:
-        if "." in name:
-            name = os.path.splitext(os.path.basename(name))[0]
-        fn = os.path.join(get_aircraft_deck_types_folder(), name + ".json")
-        logger.info(f"loading Konva ({fn})", args)
-        with open(fn, "r") as fp:
-            code = json.load(fp)
-    else:
-        return {"status": "no name"}
-    return code
+    return legacy_designer_removed()
 
 
 # Deck runner

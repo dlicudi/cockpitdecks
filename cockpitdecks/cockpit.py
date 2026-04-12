@@ -2829,6 +2829,7 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
             "decks": decks,
             "fonts": list(self.fonts.keys()),
             "icons": list(self.icons.keys()),
+            "sounds": list(self.sounds.keys()),
             "activations": list(self.all_activations.keys()),
             "representations": list(self.all_representations.keys()),
         }
@@ -2993,10 +2994,35 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
         return cap
 
     def get_activation_parameters(self, name, index=None):
-        return self.all_activations.get(name).parameters()
+        activation = self.all_activations.get(name)
+        if activation is None:
+            return {}
+        schema = activation.editor_schema() if hasattr(activation, "editor_schema") else {"parameters": activation.parameters()}
+        schema["storage_mode"] = "flat"
+        return schema
 
     def get_representation_parameters(self, name, index=None):
-        return self.all_representations.get(name).parameters()
+        representation = self.all_representations.get(name)
+        if representation is None:
+            return {}
+        schema = representation.editor_schema() if hasattr(representation, "editor_schema") else {"parameters": representation.parameters()}
+        schema["storage_mode"] = "nested_block" if name in {
+            "annunciator",
+            "annunciator-animate",
+            "chart",
+            "circular-switch",
+            "compass",
+            "data",
+            "gauge",
+            "knob",
+            "push-switch",
+            "switch",
+            "tape",
+            "weather-metar",
+            "weather-real",
+            "weather-xp",
+        } else "flat"
+        return schema
 
     def save_deck(self, deck):
         fn = os.path.join(self.aircraft.acpath, CONFIG_FOLDER, CONFIG_FILE)

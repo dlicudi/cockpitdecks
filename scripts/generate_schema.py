@@ -114,6 +114,11 @@ def build_properties(parameters: Dict[str, Any]) -> Dict[str, Any]:
 
     return props
 
+def merge_properties(target: Dict[str, Any], source: Dict[str, Any]) -> None:
+    for key, value in (source or {}).items():
+        if key not in target:
+            target[key] = value
+
 def main():
     # Force loading of all built-in extensions to find all activations/representations
     for folder in ["activation", "representation"]:
@@ -164,32 +169,43 @@ def main():
                 {"type": "boolean"}
             ]
         },
-        "button": {
+        "encoder-display-label": {
             "type": "object",
-            "required": ["index"],
             "properties": {
-                "index": {"oneOf": [{"type": "integer"}, {"type": "string"}], "description": "Button index on the deck"},
-                "name": {"oneOf": [{"type": "string"}, {"type": "number"}, {"type": "boolean"}], "description": "Optional friendly name"},
-                "activation": {
-                    "type": "string",
-                    "description": f"Activation type. Known core values: {', '.join(activation_names)}. Extensions may add more."
-                },
-                "representation": {
-                    "type": "string",
-                    "description": f"Representation type. Known core values: {', '.join(representation_names)}. Extensions may add more."
-                },
-                "dataref": {"type": "string", "description": "Primary dataref for the button"},
-                "formula": {"$ref": "#/$defs/formula"},
-                "options": {"type": "string", "description": "Comma-separated options"},
                 "label": {"type": "string"},
                 "label-color": {"$ref": "#/$defs/color"},
                 "label-size": {"type": "integer"},
                 "label-font": {"type": "string"},
                 "label-position": {"type": "string", "enum": ["lt", "ct", "rt", "lm", "cm", "rm", "lb", "cb", "rb"]},
-                "icon": {"type": "string"},
+                "text": {"type": "string"},
+                "text-color": {"$ref": "#/$defs/color"},
+                "text-size": {"type": "integer"},
+                "text-font": {"type": "string"},
+                "text-position": {"type": "string", "enum": ["lt", "ct", "rt", "lm", "cm", "rm", "lb", "cb", "rb"]},
+                "formula": {"$ref": "#/$defs/formula"},
+                "text-format": {"type": "string"}
+            },
+            "additionalProperties": True
+        },
+        "screen-config": {
+            "type": "object",
+            "properties": {
+                "background": {"$ref": "#/$defs/color"},
+                "render-cooldown-ms": {"type": "integer", "minimum": 0}
+            },
+            "additionalProperties": True
+        },
+        "activation": {
+            "type": "object",
+            "required": ["type"],
+            "properties": {
+                "type": {
+                    "type": "string",
+                    "description": f"Activation type. Known core values: {', '.join(activation_names)}. Extensions may add more."
+                },
                 "commands": {
                     "type": "object",
-                    "description": "Named commands for this button's activation events",
+                    "description": "Named commands for this activation's events",
                     "properties": {
                         "press": {"$ref": "#/$defs/command"},
                         "long-press": {"$ref": "#/$defs/command"},
@@ -210,84 +226,85 @@ def main():
                     "description": "Ordered list of commands for sweep/positional activation"
                 },
                 "behaviour": {"type": "string", "enum": ["bounce", "loop"], "description": "Sweep behaviour"},
+                "page": {"type": "string"},
+                "pages": {"type": "array", "items": {"type": "string"}}
+            },
+            "additionalProperties": True,
+            "allOf": []
+        },
+        "representation": {
+            "type": "object",
+            "required": ["type"],
+            "properties": {
+                "type": {
+                    "type": "string",
+                    "description": f"Representation type. Known core values: {', '.join(representation_names)}. Extensions may add more."
+                },
+                "label": {"type": "string"},
+                "label-color": {"$ref": "#/$defs/color"},
+                "label-size": {"type": "integer"},
+                "label-font": {"type": "string"},
+                "label-position": {"type": "string", "enum": ["lt", "ct", "rt", "lm", "cm", "rm", "lb", "cb", "rb"]},
+                "text": {"type": "string"},
+                "text-color": {"$ref": "#/$defs/color"},
+                "text-size": {"type": "integer"},
+                "text-font": {"type": "string"},
+                "text-position": {"type": "string", "enum": ["lt", "ct", "rt", "lm", "cm", "rm", "lb", "cb", "rb"]},
+                "text-format": {"type": "string"},
+                "formula": {"$ref": "#/$defs/formula"},
+                "icon": {"type": "string"},
+                "side": {"type": "object", "additionalProperties": True}
+            },
+            "additionalProperties": True,
+            "allOf": []
+        },
+        "button": {
+            "type": "object",
+            "required": ["index", "activation", "representation"],
+            "properties": {
+                "index": {"oneOf": [{"type": "integer"}, {"type": "string"}], "description": "Button index on the deck"},
+                "name": {"oneOf": [{"type": "string"}, {"type": "number"}, {"type": "boolean"}], "description": "Optional friendly name"},
+                "activation": {"$ref": "#/$defs/activation"},
+                "representation": {"$ref": "#/$defs/representation"},
+                "dataref": {"type": "string", "description": "Primary dataref for the button"},
                 "set-dataref": {"type": "string"},
+                "options": {"type": "string", "description": "Comma-separated options"},
+                "deck": {"type": "string"},
+                "formula": {"$ref": "#/$defs/formula"},
                 "vibrate": {"type": "string"},
                 "sound": {"type": "string"},
                 "long-time": {"type": "number"},
                 "initial-value": {"oneOf": [{"type": "string"}, {"type": "number"}, {"type": "boolean"}]}
             },
-            "patternProperties": {
-                "^representation-.*$": {"type": "object"}
-            },
-            "allOf": []
+            "additionalProperties": True
         }
     }
 
-    # Top-level button properties that are fully defined — skip these from activation allOf conditions
-    # to avoid conflicting constraints (e.g., activation PARAMETERS define commands.press as string,
-    # but top-level allows arrays for macros).
-    SKIP_IN_ACTIVATION_THEN = {"commands", "positions", "behaviour"}
-
-    # Add activation-specific properties to Button
+    # Add activation-specific properties under activation.type
     for a in activations:
         a_name = a.name().lower()
         if a_name in ("base", "none") or not hasattr(a, "PARAMETERS"):
             continue
-        a_props = build_properties({k: v for k, v in a.PARAMETERS.items() if k not in SKIP_IN_ACTIVATION_THEN})
+        a_props = build_properties(a.PARAMETERS)
         if a_props:
-            defs["button"]["allOf"].append({
-                "if": {"properties": {"activation": {"const": a_name}}},
+            merge_properties(defs["activation"]["properties"], a_props)
+            defs["activation"]["allOf"].append({
+                "if": {"properties": {"type": {"const": a_name}}},
                 "then": {"properties": a_props}
             })
 
-    # Add representation-specific properties to Button
+    # Add representation-specific properties under representation.type
     for r in representations:
         r_name = r.name().lower()
         if r_name == "none" or not hasattr(r, "PARAMETERS"):
             continue
-        params = r.PARAMETERS
-
-        # Detect the "-items" pattern: a "-"-prefixed key in PARAMETERS signals that
-        # this representation is an ARRAY at the button level. The "-key"'s list value
-        # defines the item schema.
-        array_signal_key = next((k for k in params if k.startswith("-")), None)
-        if array_signal_key is not None:
-            # Build item properties from the list sub-schema of the array signal key
-            item_spec = params[array_signal_key]
-            if isinstance(item_spec, dict) and item_spec.get("type") == "sub":
-                item_params = item_spec.get("list", {})
-                if isinstance(item_params, dict):
-                    item_props = build_properties(item_params)
-                    base_prop = {"type": "array", "items": {"type": "object", "properties": item_props}}
-                else:
-                    base_prop = {"type": "array", "items": {"type": "string"}}
-            elif isinstance(item_spec, dict):
-                # Non-sub: the item schema is the type of the signal key itself
-                item_schema = build_properties({array_signal_key: item_spec}).get(array_signal_key, {})
-                base_prop = {"type": "array", "items": {"oneOf": [item_schema, {"type": "object"}]}}
-            else:
-                base_prop = {"type": "array", "items": {}}
-        # When the representation's PARAMETERS has a single key equal to the representation name,
-        # the value at button level IS that property's schema directly (no extra nesting).
-        elif list(params.keys()) == [r_name]:
-            r_props = build_properties(params)
-            base_prop = r_props[r_name]
-        elif r_name in ["icon", "text", "label", "icon-color", "ftg"]:
-            # These can appear as simple scalar values OR as representation config objects
-            r_props = build_properties(params)
-            base_prop = {
-                "oneOf": [
-                    {"type": "string"},
-                    {"type": "boolean"},
-                    {"type": "number"},
-                    {"type": "object", "properties": r_props}
-                ]
-            }
-        else:
-            r_props = build_properties(params)
-            base_prop = {"type": "object", "properties": r_props}
-
-        defs["button"]["properties"][r_name] = base_prop
+        r_props = build_properties(r.PARAMETERS)
+        if r_props:
+            merge_properties(defs["representation"]["properties"], r_props)
+            defs["representation"]["allOf"].append({
+                "if": {"properties": {"type": {"const": r_name}}},
+                "then": {"properties": r_props}
+            })
 
     schema = {
         "$schema": "http://json-schema.org/draft-07/schema#",

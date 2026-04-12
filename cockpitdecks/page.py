@@ -118,6 +118,8 @@ class Page:
         if deck_type is None:
             logger.error(f"page {self.name}: no deck type available, cannot load buttons")
             return built
+        buttons = self.deck.preprocess_buttons(buttons, self)
+
         for button_config in buttons:
             try:
                 button = None
