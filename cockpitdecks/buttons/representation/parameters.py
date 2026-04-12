@@ -54,15 +54,15 @@ PARAM_BTN_COMMON = {
     "top-fill-color": {"label": "Top Fill Color", "type": "color", "hint": "Color for the top cap of the handle", "group": "Appearance"},
     "top-stroke-color": {"label": "Top Stroke Color", "type": "color", "hint": "Border color for the top cap", "group": "Appearance"},
     "top-stroke-width": {"label": "Top Stroke Width", "type": "int", "hint": "Width of the top cap border", "group": "Appearance"},
+    "tick-from": {"label": "Tick From", "type": "string", "hint": "Starting angle (degrees) for the scale arc", "group": "Style", "sample": "-120"},
+    "tick-to": {"label": "Tick To", "type": "string", "hint": "Ending angle (degrees) for the scale arc", "group": "Style", "sample": "120"},
+    "tick-labels": {"type": "sub", "list": {"-label": {"type": "string", "label": "Position label"}}, "min": 1, "max": 0, "hint": "Label for each position (one per line in form)", "group": "Style", "sample": '[{"-label": "OFF"}, {"-label": "ON"}]'},
     "tick-color": {"label": "Tick Color", "type": "color", "hint": "Color for scale graduation marks", "group": "Ticks"},
-    "tick-from": {"label": "Tick From", "type": "string", "hint": "Starting angle (degrees) for the scale", "group": "Ticks", "sample": "90"},
-    "tick-labels": {"type": "sub", "list": {"-label": {"type": "string", "label": "Lbl txt"}}, "min": 1, "max": 0, "hint": "Labels for each switch position", "group": "Labels", "sample": '["ON", "OFF"]'},
-    "tick-label-color": {"label": "Tick Label Color", "type": "color", "hint": "Color for graduation mark labels", "group": "Labels"},
-    "tick-label-size": {"label": "Tick Label Size", "type": "int", "hint": "Font size for graduation labels", "group": "Labels"},
-    "tick-label-space": {"label": "Tick Label Space", "type": "string", "hint": "Distance from tick to label", "group": "Labels"},
+    "tick-label-color": {"label": "Tick Label Color", "type": "color", "hint": "Color for graduation mark labels", "group": "Ticks"},
+    "tick-label-size": {"label": "Tick Label Size", "type": "int", "hint": "Font size for graduation labels", "group": "Ticks"},
+    "tick-label-space": {"label": "Tick Label Space", "type": "string", "hint": "Distance from tick to label", "group": "Ticks"},
     "tick-length": {"label": "Tick Length", "type": "int", "hint": "Length of graduation marks", "group": "Ticks"},
     "tick-space": {"label": "Tick Space", "type": "string", "hint": "Distance from base to graduation marks", "group": "Ticks"},
-    "tick-to": {"label": "Tick To", "type": "string", "hint": "Ending angle (degrees) for the scale", "group": "Ticks", "sample": "270"},
     "tick-underline-color": {"label": "Tick Underline Color", "type": "color", "hint": "Color for decorative scale underline", "group": "Ticks"},
     "tick-underline-width": {"label": "Tick Underline Width", "type": "int", "hint": "Width of decorative scale underline", "group": "Ticks"},
     "tick-width": {"label": "Tick Width", "type": "int", "hint": "Width/thickness of graduation marks", "group": "Ticks"},
@@ -76,10 +76,10 @@ PARAM_BTN_COMMON = {
 }
 
 PARAM_BTN_SWITCH = {
-    "switch-handle-dot-color": {"label": "Switch Handle Dot Color", "type": "color", "hint": "Color for the dot on the switch handle", "group": "Appearance"},
+    "switch-style": {"label": "Switch Style", "type": "string", "hint": "Visual style: 'round', 'rect', or '3dot'", "group": "Style", "sample": "round"},
     "switch-length": {"label": "Switch Length", "type": "int", "hint": "Total length of the switch lever", "group": "Appearance"},
-    "switch-style": {"label": "Switch Style", "type": "string", "hint": "Visual style of the switch (e.g., 'round', 'rect', '3dot')", "group": "Appearance", "sample": "round"},
     "switch-width": {"label": "Switch Width", "type": "int", "hint": "Width/thickness of the switch lever", "group": "Appearance"},
+    "switch-handle-dot-color": {"label": "Handle Dot Color", "type": "color", "hint": "Color for the indicator dot on the switch handle", "group": "Appearance"},
 }
 
 PARAM_BTN_CIRCULAR_SWITCH = {}
