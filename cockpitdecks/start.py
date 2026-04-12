@@ -35,7 +35,7 @@ import ruamel
 from ruamel.yaml import YAML
 
 from cockpitdecks import __NAME__, __version__, __COPYRIGHT__, __DESCRIPTION__, Config, LOGFILE, FORMAT
-from cockpitdecks.constant import ENVIRON_KW, CONFIG_KW, DECK_KW, DECKS_FOLDER, DECK_TYPES, TEMPLATE_FOLDER, ASSET_FOLDER, AUTOSAVE_FILE
+from cockpitdecks.constant import ENVIRON_KW, CONFIG_KW, DECK_KW, CONFIG_FOLDER, DECKS_FOLDER, DECK_TYPES, TEMPLATE_FOLDER, ASSET_FOLDER, AUTOSAVE_FILE
 from cockpitdecks.cockpit import Cockpit
 from cockpitdecks.aircraft import DECK_TYPE_DESCRIPTION
 from cockpitdecks.webcontrol import install_recent_log_handler, register_web_control

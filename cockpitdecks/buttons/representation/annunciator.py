@@ -465,7 +465,7 @@ class Annunciator(DrawBase):
 
     PARAMETERS = {
         "icon": {"type": "icon", "prompt": "Icon"},
-        "type": {"type": "string", "prompt": "Type", "lov": ["A", "B", "C", "D", "E", "F"]},
+        "model": {"label": "Model", "type": "choice", "lov": ["A", "B", "C", "D", "E", "F"], "storage_mode": "nested_block"},
         # "style": {"type": "string", "prompt": "Style", "lov": ["Korry", "Vivisun"]},
         # "color": {"type": "color", "prompt": "Background color"},
         # "texture": {"type": "icon", "prompt": "Background texture"},
@@ -473,9 +473,10 @@ class Annunciator(DrawBase):
         "annunciator-style": {"label": "Annunciator Style", "type": "string"},
         "annunciator-texture": {"label": "Annunciator Texture", "type": "icon"},
         "light-off-intensity": {"label": "Light Off Intensity", "type": "string"},
-        "annunciator-parts": {
+        "parts": {
             "label": "Parts",
             "type": "sub",
+            "storage_mode": "nested_block",
             "min": 1,
             "max": 6,
             "prompt": "Parts",
@@ -505,7 +506,7 @@ class Annunciator(DrawBase):
                     },
                 },
             },  # part
-        },  # annunciator-parts
+        },  # parts
     }
 
     @classmethod
