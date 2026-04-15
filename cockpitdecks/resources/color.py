@@ -24,7 +24,7 @@ def is_integer(s) -> bool:
         return False
     try:
         int(s)
-    except ValueError:
+    except (ValueError, OverflowError):
         return False
     return True
 

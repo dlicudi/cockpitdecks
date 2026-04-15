@@ -788,10 +788,18 @@ class DeckWithIcons(Deck):
         if base_size is None:
             return None
         cw, ch = base_size
-        # Infer gap from the adjacent button's position
+        # Infer gap from the adjacent button's position.
+        # Only use button.index + 1 when it is actually to the right of the current
+        # button; if it wraps to the next row its x-position will be less than or equal
+        # to the current button's x-position, which would produce a negative gap.
         gx = gy = 0
         next_def = self.deck_type.get_button_definition(button.index + 1)
-        if next_def is not None and next_def.position is not None and base_def.position is not None:
+        if (
+            next_def is not None
+            and next_def.position is not None
+            and base_def.position is not None
+            and next_def.position[0] > base_def.position[0]
+        ):
             gx = next_def.position[0] - (base_def.position[0] + cw)
             gy = gx  # assume square gap
         return (sw * cw + (sw - 1) * gx, sh * ch + (sh - 1) * gy)

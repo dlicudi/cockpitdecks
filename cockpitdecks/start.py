@@ -733,6 +733,8 @@ def button_designer_io():
 #
 @app.route("/deck/<name>")
 def deck(name: str):
+    if cockpit is None:
+        abort(503, description="Cockpitdecks is still starting up")
     uname = urllib.parse.unquote(name)
     app.logger.debug(f"Starting deck {uname}")
     deck_desc = cockpit.get_virtual_deck_description(uname)
@@ -750,6 +752,8 @@ def deck(name: str):
 @app.route("/deck-bg/<name>", defaults={"alternate": None})
 @app.route("/deck-bg/<name>/alternate/<alternate>")
 def deck_bg(name: str, alternate: str | None = None):
+    if cockpit is None:
+        abort(503, description="Cockpitdecks is still starting up")
     if name is None or name == "":
         app.logger.debug(f"no deck name")
         abort(404)

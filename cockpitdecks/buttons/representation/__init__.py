@@ -21,6 +21,7 @@ from .switch import Switch, CircularSwitch, PushSwitch, Knob
 from .data import DataIcon
 from .chart import ChartIcon
 from .gauge import TapeIcon, GaugeIcon
+from .slider import SliderIcon
 from .solari import SolariIcon
 
 if not sysconfig.get_config_var("Py_GIL_DISABLED"):

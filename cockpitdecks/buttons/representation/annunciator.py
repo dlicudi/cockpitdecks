@@ -86,9 +86,19 @@ class AnnunciatorPart:
 
     def set_sizes(self, annun_width, annun_height):
         if self.name not in AnnunciatorPart.ANNUNCIATOR_PARTS.keys():
-            logger.error(f"invalid annunciator part name {self.name}, sizes not set")
-            return
-        w, h = AnnunciatorPart.ANNUNCIATOR_PARTS[self.name]
+            # Part index exceeds the model's named slots (e.g. B2 on a 2-slot model B).
+            # Fall back to the last valid slot for this model so that extra conditional
+            # parts (e.g. ON / OFF text) still render at the same visual position.
+            model_prefix = self.name.rstrip("0123456789")
+            candidates = sorted(k for k in AnnunciatorPart.ANNUNCIATOR_PARTS if k.startswith(model_prefix))
+            if not candidates:
+                logger.error(f"invalid annunciator part name {self.name}, sizes not set")
+                return
+            fallback = candidates[-1]
+            logger.debug(f"annunciator part {self.name} exceeds model capacity, using {fallback} geometry")
+            w, h = AnnunciatorPart.ANNUNCIATOR_PARTS[fallback]
+        else:
+            w, h = AnnunciatorPart.ANNUNCIATOR_PARTS[self.name]
         self._width = annun_width if w == 0.5 else annun_width / 2
         self._height = annun_height if h == 0.5 else annun_height / 2
         self._center_w = int(w * annun_width)
@@ -259,6 +269,9 @@ class AnnunciatorPart:
     def render(self, draw, bgrd_draw, icon_size, annun_width, annun_height, inside, size, state=None):
         started_at = time.perf_counter()
         self.set_sizes(annun_width, annun_height)
+        if self._height is None:
+            logger.warning(f"button {self.annunciator.button.name}: part {self.name}: invalid part name, skipping render")
+            return
         TEXT_SIZE = int(self.height() / 2)  # @todo: find optimum variable text size depending on text length
         if state is None:
             state = self.get_render_state()
