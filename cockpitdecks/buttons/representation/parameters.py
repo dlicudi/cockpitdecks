@@ -82,7 +82,11 @@ PARAM_BTN_SWITCH = {
     "switch-handle-dot-color": {"label": "Handle Dot Color", "type": "color", "hint": "Color for the indicator dot on the switch handle", "group": "Appearance"},
 }
 
-PARAM_BTN_CIRCULAR_SWITCH = {}
+PARAM_BTN_CIRCULAR_SWITCH = {
+    "angle-start": {"label": "Angle Start", "type": "int", "hint": "Starting angle of the switch arc in degrees (0 = 12 o'clock, increasing clockwise)", "group": "Style"},
+    "angle-end": {"label": "Angle End", "type": "int", "hint": "Ending angle of the switch arc in degrees (0 = 12 o'clock, increasing clockwise)", "group": "Style"},
+    "ticks": {"type": "list", "list": "string", "label": "Ticks", "hint": "One label per stop, in order. Replaces tick-labels and determines stop count.", "group": "Style"},
+}
 
 PARAM_BTN_PUSH = {
     "witness-fill-color": {"label": "Witness Fill Color", "type": "color"},

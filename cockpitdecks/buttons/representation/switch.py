@@ -159,20 +159,31 @@ class CircularSwitch(SwitchBase):
             logger.warning("no switch configuration")
             return
 
-        self.tick_from = self.switch.get("tick-from", 90)
-        self.tick_to = self.switch.get("tick-to", 270)
+        self.tick_from = self.switch.get("angle-start", 90)
+        self.tick_to = self.switch.get("angle-end", 270)
         self.tick_mode = self.switch.get("tick-mode", "normal")
         self.tick_off_color = self.switch.get("tick-off-color", self.tick_color)
-        if hasattr(self.button._activation, "stops"):
-            self.tick_steps = self.button._activation.stops
-            logger.debug(f"button {self.button.name}: button has {self.tick_steps} steps")
-        else:
-            self.tick_steps = self.switch.get("tick-steps", 2)
+
+        # ticks list is the single source of truth for labels and stop count.
+        # Each entry is either a plain string label or {label: ..., value: ...}.
+        ticks_raw = self.switch.get("ticks", [])
+        tick_labels = []
+        for t in ticks_raw:
+            if isinstance(t, str):
+                tick_labels.append(t)
+            elif isinstance(t, dict):
+                tick_labels.append(str(t.get("label", "")))
+            else:
+                tick_labels.append(str(t))
+        self.tick_labels = tick_labels
+        self.tick_steps = len(tick_labels)
+
         if self.tick_steps < 2:
             logger.warning(f"button {self.button.name}: insuficient number of steps: {self.tick_steps}, forcing 2")
             self.tick_steps = 2
         logger.debug(f"button {self.button.name}: {self.tick_steps} steps")
-        self.angular_step = (self.tick_to - self.tick_from) / (self.tick_steps - 1)
+        tick_to = self.tick_to if self.tick_to >= self.tick_from else self.tick_to + 360
+        self.angular_step = (tick_to - self.tick_from) / (self.tick_steps - 1)
         if len(self.tick_labels) > 0 and len(self.tick_labels) < self.tick_steps:
             logger.warning(f"button {self.button.name}: not enough label ({len(self.tick_labels)}/{self.tick_steps})")
 
@@ -222,12 +233,12 @@ class CircularSwitch(SwitchBase):
 
         for i in range(self.tick_steps):
             a = red(self.tick_from + i * self.angular_step)
-            x0 = center[0] - tick_start * math.sin(math.radians(a))
-            y0 = center[1] + tick_start * math.cos(math.radians(a))
-            x1 = center[0] - tick_end * math.sin(math.radians(a))
-            y1 = center[1] + tick_end * math.cos(math.radians(a))
-            x2 = center[0] - tick_lbl * math.sin(math.radians(a))
-            y2 = center[1] + tick_lbl * math.cos(math.radians(a))
+            x0 = center[0] + tick_start * math.sin(math.radians(a))
+            y0 = center[1] - tick_start * math.cos(math.radians(a))
+            x1 = center[0] + tick_end * math.sin(math.radians(a))
+            y1 = center[1] - tick_end * math.cos(math.radians(a))
+            x2 = center[0] + tick_lbl * math.sin(math.radians(a))
+            y2 = center[1] - tick_lbl * math.cos(math.radians(a))
             # print(f"===> ({x0},{y0}) ({x1},{y1}) a=({x2},{y2})")
 
             label_anchors.append([a, x2, y2])
@@ -240,8 +251,8 @@ class CircularSwitch(SwitchBase):
                     tip_image = tip_image.rotate(
                         red(-a),
                         translate=(
-                            -self.needle_start * math.sin(math.radians(a)),
-                            self.needle_start * math.cos(math.radians(a)),
+                            self.needle_start * math.sin(math.radians(a)),
+                            -self.needle_start * math.cos(math.radians(a)),
                         ),
                     )  # ;-)
                     image.alpha_composite(tip_image)
@@ -255,8 +266,8 @@ class CircularSwitch(SwitchBase):
             draw.arc(
                 tl + br,
                 fill=self.tick_underline_color,
-                start=self.tick_from + 90,
-                end=self.tick_to + 90,
+                start=self.tick_from - 90,
+                end=self.tick_to - 90,
                 width=self.tick_underline_width,
             )
 
@@ -268,11 +279,11 @@ class CircularSwitch(SwitchBase):
                 angle = int(label_anchors[i][0])
                 tolerence = 30
                 if angle > tolerence and angle < 180 - tolerence:
-                    anchor = "rs"
-                    align = "right"
-                elif angle > 180 + tolerence and angle < 360 - tolerence:
                     anchor = "ls"
                     align = "left"
+                elif angle > 180 + tolerence and angle < 360 - tolerence:
+                    anchor = "rs"
+                    align = "right"
                 else:  # 0, 180, 360
                     anchor = "ms"
                     align = "center"
@@ -352,10 +363,10 @@ class CircularSwitch(SwitchBase):
             # end = handle_height + side / 2 - r / 2
             length = self.needle_length
             end = start + length
-            xr = center[0] - start * math.sin(math.radians(angle))
-            yr = center[1] + start * math.cos(math.radians(angle))
-            xc = center[0] - end * math.sin(math.radians(angle))
-            yc = center[1] + end * math.cos(math.radians(angle))
+            xr = center[0] + start * math.sin(math.radians(angle))
+            yr = center[1] - start * math.cos(math.radians(angle))
+            xc = center[0] + end * math.sin(math.radians(angle))
+            yc = center[1] - end * math.cos(math.radians(angle))
             if self.needle_underline_width > 0:
                 draw.line(
                     [(xc, yc), (xr, yr)],
@@ -390,18 +401,18 @@ class CircularSwitch(SwitchBase):
                 tip_image = tip_image.rotate(
                     red(-angle),
                     translate=(
-                        -end * math.sin(math.radians(angle)),
-                        end * math.cos(math.radians(angle)),
+                        end * math.sin(math.radians(angle)),
+                        -end * math.cos(math.radians(angle)),
                     ),
                 )  # ;-)
                 image.alpha_composite(tip_image)
 
         else:  # Just a needle
-            xr = center[0] - self.button_size / 2 * math.sin(math.radians(angle))
-            yr = center[1] + self.button_size / 2 * math.cos(math.radians(angle))
+            xr = center[0] + self.button_size / 2 * math.sin(math.radians(angle))
+            yr = center[1] - self.button_size / 2 * math.cos(math.radians(angle))
             length = self.button_size / 2 - self.needle_length
-            xc = center[0] - length * math.sin(math.radians(angle))
-            yc = center[1] + length * math.cos(math.radians(angle))
+            xc = center[0] + length * math.sin(math.radians(angle))
+            yc = center[1] - length * math.cos(math.radians(angle))
             # print(f"***> {value} => {angle}")
             if self.needle_underline_width > 0:
                 draw.line(
@@ -437,8 +448,8 @@ class CircularSwitch(SwitchBase):
                 tip_image = tip_image.rotate(
                     red(-angle),
                     translate=(
-                        -end * math.sin(math.radians(angle)),
-                        end * math.cos(math.radians(angle)),
+                        end * math.sin(math.radians(angle)),
+                        -end * math.cos(math.radians(angle)),
                     ),
                 )  # ;-)
                 image.alpha_composite(tip_image)
