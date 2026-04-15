@@ -5,12 +5,12 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <style type="text/css">
-/* dark grey on light blue */
+/* Default to dark so no white flash before JS applies the deck's background color */
 :root {
     --font-color: #424242;
     --bg-color: #A8B7E6;
-    --background-color: #DDDDDD;
-    --deck-background-color: #DDDDDD;
+    --background-color: #1c1c1c;
+    --deck-background-color: #1c1c1c;
     --panel-color: rgba(22, 28, 36, 0.72);
     --panel-border: rgba(255, 255, 255, 0.16);
 }
@@ -98,6 +98,12 @@ const DARK  = (DECK[DECK_TYPE_KEY].background?.alt_color != undefined);
 
 const BACKGROUND_COLOR_ALT = DECK[DECK_TYPE_KEY].background?.alt_color || DEFAULT_BACKGROUND_COLOR_ALT;
 
+// Apply the deck's background color to the page chrome so the area outside the
+// canvas matches the deck rather than showing the browser's default grey/white.
+const DECK_PAGE_BG = DECK[DECK_TYPE_KEY].background?.color || '#1c1c1c';
+document.documentElement.style.setProperty('--background-color', DECK_PAGE_BG);
+document.documentElement.style.setProperty('--deck-background-color', DECK_PAGE_BG);
+
 //
 // Canvas + LiveDeck setup
 //
@@ -131,9 +137,18 @@ if (DARK && DECK.dark_mode) {
     deck.set_background_image(null, BACKGROUND_COLOR_ALT);
 }
 
-window.addEventListener("resize", apply_viewport_layout);
+// Defer layout reads until after the browser has committed the new geometry.
+// On iOS, orientationchange fires resize before clientWidth/clientHeight update,
+// so a direct call reads stale dimensions. Double-rAF is necessary on Safari.
+function schedule_viewport_layout() {
+    requestAnimationFrame(function() {
+        requestAnimationFrame(apply_viewport_layout);
+    });
+}
+
+window.addEventListener("resize", schedule_viewport_layout);
 if (window.visualViewport) {
-    window.visualViewport.addEventListener("resize", apply_viewport_layout);
+    window.visualViewport.addEventListener("resize", schedule_viewport_layout);
 }
 
 if (DEBUG) {
@@ -218,7 +233,7 @@ function connect() {
         }
         if (data.code == 0) {
             if (data.span) { deck.set_key_span(data.key, data.span); }
-            deck.set_key_image(data.key, data.image);
+            deck.set_key_image(data.key, data.image, data.meta);
         } else if (data.code == 1) {
             deck.clear_images();
         } else if (data.code == 2) {

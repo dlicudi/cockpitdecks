@@ -6,7 +6,7 @@ import logging
 import threading
 
 from cockpitdecks.constant import ID_SEP
-from cockpitdecks.event import EncoderEvent, PushEvent, TouchEvent
+from cockpitdecks.event import EncoderEvent, PushEvent, SwipeEvent, TouchEvent
 from cockpitdecks.resources.color import is_integer
 from cockpitdecks import CONFIG_KW, DECK_KW, DECK_ACTIONS
 from cockpitdecks.resources.intvariables import COCKPITDECKS_INTVAR
@@ -279,15 +279,22 @@ class Sweep(Activation):
     With 2 stops (default) this is equivalent to a simple toggle.
     Behaviour is 'bounce' (0→1→2→1→0) by default, or 'cycle' (0→1→2→0→1→2).
     commands list is positional: commands[i] fires when arriving at stop i.
+    On touch surfaces, a tap advances and a swipe moves directionally (up/right = forward,
+    down/left = backward). Use swipe-invert: true to reverse the swipe direction.
     """
 
     ACTIVATION_NAME = "sweep"
-    REQUIRED_DECK_ACTIONS = [DECK_ACTIONS.PRESS, DECK_ACTIONS.LONGPRESS, DECK_ACTIONS.PUSH]
+    REQUIRED_DECK_ACTIONS = [DECK_ACTIONS.PRESS, DECK_ACTIONS.LONGPRESS, DECK_ACTIONS.PUSH, DECK_ACTIONS.SWIPE, DECK_ACTIONS.ENCODER]
+
+    SWIPE_MIN_DISTANCE = 10  # pixels below which a touch is treated as a tap
 
     PARAMETERS = PARAM_INITIAL_VALUE | {
         "positions": {"type": "list", "list": "string", "label": "Position Commands", "hint": "Ordered list of command strings for each switch position"},
         "stops": {"type": "integer", "label": "Number of stops (when no positions)", "default-value": 2},
         "behaviour": {"type": "lov", "label": "Sweep Behaviour", "lov": ["bounce", "cycle"], "default-value": "bounce"},
+        "swipe-invert": {"type": "boolean", "label": "Invert Swipe", "hint": "Reverse swipe direction (down/left becomes forward)", "default-value": False},
+        "scroll-invert": {"type": "boolean", "label": "Invert Scroll", "hint": "Reverse scroll wheel direction (scroll down becomes forward)", "default-value": False},
+        "swipe-minimum-distance": {"type": "float", "label": "Swipe Min Distance (px)", "hint": "Minimum pixel distance to treat a touch as a swipe rather than a tap", "default-value": SWIPE_MIN_DISTANCE},
     }
 
     def __init__(self, button: "Button"):
@@ -301,6 +308,9 @@ class Sweep(Activation):
             for pos in positions
         ]
         self.sweep_behaviour = button._config.get("behaviour", "bounce")
+        self.swipe_invert = bool(button._config.get("swipe-invert", False))
+        self.scroll_invert = bool(button._config.get("scroll-invert", False))
+        self.swipe_minimum_distance = float(button._config.get("swipe-minimum-distance", Sweep.SWIPE_MIN_DISTANCE))
 
         # Internal state
         self.stop_current = 0
@@ -331,6 +341,12 @@ class Sweep(Activation):
     def num_stops(self):
         if self._sweep_commands:
             return len(self._sweep_commands)
+        # Derive from ticks list in circular-switch representation
+        cs = self.button._config.get("circular-switch")
+        if isinstance(cs, dict):
+            ticks = cs.get("ticks", [])
+            if isinstance(ticks, list) and ticks:
+                return len(ticks)
         return int(self.button._config.get("stops", 2))
 
     def num_commands(self) -> int:
@@ -357,6 +373,29 @@ class Sweep(Activation):
                 if self.stop_current <= 0:
                     self.go_forward = True
         return self.stop_current
+
+    def _step(self, forward: bool) -> int:
+        """Move exactly one stop in the given direction regardless of bounce state."""
+        n = self.num_stops
+        if self.sweep_behaviour == "cycle":
+            self.stop_current = (self.stop_current + 1) % n if forward else (self.stop_current - 1) % n
+        else:
+            self.stop_current = min(self.stop_current + 1, n - 1) if forward else max(self.stop_current - 1, 0)
+        # Keep go_forward consistent so a subsequent push bounce continues naturally
+        if self.stop_current >= n - 1:
+            self.go_forward = False
+        elif self.stop_current <= 0:
+            self.go_forward = True
+        return self.stop_current
+
+    def _swipe_direction(self, dx: float, dy: float) -> bool:
+        """Return True (forward) for up/right swipes, False (backward) for down/left.
+        Primary axis is whichever delta is larger. Respects swipe-invert setting."""
+        if abs(dy) >= abs(dx):
+            forward = dy < 0  # swipe up = forward
+        else:
+            forward = dx > 0  # swipe right = forward
+        return (not forward) if self.swipe_invert else forward
 
     def __str__(self):
         return (
@@ -386,10 +425,38 @@ class Sweep(Activation):
             return False
         if not super().activate(event):
             return False
-        if event.pressed:
+
+        next_stop = None
+        if isinstance(event, EncoderEvent):
+            forward = event.clockwise if not self.scroll_invert else not event.clockwise
+            next_stop = self._step(forward)
+            logger.debug(f"button {self.button_name}: scroll {'forward' if forward else 'backward'} → stop {next_stop}")
+        elif isinstance(event, TouchEvent):
+            # Only act on the touch-end event (start is not None)
+            if event.start is None:
+                return True
+            swipe = event.swipe(autorun=False)
+            if swipe is None or swipe.swipe_distance < self.swipe_minimum_distance:
+                next_stop = self._advance()  # tap = advance (toggle behaviour preserved)
+            else:
+                forward = self._swipe_direction(
+                    swipe.end_pos_x - swipe.start_pos_x,
+                    swipe.end_pos_y - swipe.start_pos_y,
+                )
+                next_stop = self._step(forward)
+                logger.debug(f"button {self.button_name}: swipe {'forward' if forward else 'backward'} → stop {next_stop}")
+        elif isinstance(event, SwipeEvent):
+            forward = self._swipe_direction(
+                event.end_pos_x - event.start_pos_x,
+                event.end_pos_y - event.start_pos_y,
+            )
+            next_stop = self._step(forward)
+            logger.debug(f"button {self.button_name}: swipe {'forward' if forward else 'backward'} → stop {next_stop}")
+        elif event.pressed:
             next_stop = self._advance()
-            if self._sweep_commands and next_stop < len(self._sweep_commands):
-                self._sweep_commands[next_stop].execute()
+
+        if next_stop is not None and self._sweep_commands and next_stop < len(self._sweep_commands):
+            self._sweep_commands[next_stop].execute()
         return True
 
     def get_activation_value(self):
@@ -1232,8 +1299,7 @@ class Slider(Activation):  # Cursor?
     ACTIVATION_NAME = "slider"
     REQUIRED_DECK_ACTIONS = DECK_ACTIONS.CURSOR
 
-    SLIDER_MAX = 100
-    SLIDER_MIN = -100
+    # Hardware range usually 0..100 (webdeck), some might be -100..100
 
     PARAMETERS = {
         "value-min": {
@@ -1264,11 +1330,16 @@ class Slider(Activation):  # Cursor?
             self.value_max = temp
         self.current_value = 0
 
-        bdef = self.button.deck.deck_type.filter({DECK_KW.ACTION.value: DECK_ACTIONS.CURSOR.value})
-        range_values = bdef[0].get(DECK_KW.RANGE.value)
-        if range_values is not None and type(range_values) in [list, tuple]:
-            Slider.SLIDER_MAX = max(range_values)
-            Slider.SLIDER_MIN = min(range_values)
+        self._slider_max = 100
+        self._slider_min = 0 # webdeck defaults to 0..100
+
+        bdefs = self.button.deck.deck_type.filter({DECK_KW.ACTION.value: DECK_ACTIONS.CURSOR.value})
+        if bdefs:
+            bdef = bdefs[0]
+            range_values = bdef.get(DECK_KW.RANGE.value)
+            if range_values is not None and type(range_values) in [list, tuple]:
+                self._slider_max = max(range_values)
+                self._slider_min = min(range_values)
 
     def is_valid(self):
         if self._set_sim_data is None:
@@ -1280,7 +1351,7 @@ class Slider(Activation):  # Cursor?
         if not self.can_handle(event):
             return False
 
-        pct = abs(event.value - Slider.SLIDER_MIN) / (Slider.SLIDER_MAX - Slider.SLIDER_MIN)
+        pct = abs(event.value - self._slider_min) / (self._slider_max - self._slider_min)
         if self.value_step != 0:
             nstep = (self.value_max - self.value_min) / self.value_step
             pct = int(pct * nstep) / nstep
@@ -1314,33 +1385,83 @@ class Swipe(Activation):
     EDITOR_FAMILY = "Touch"
     EDITOR_LABEL = "Swipe"
     """
-    A Encoder that can turn left/right.
+    Touch-surface swipe activation.
+    Fires up/down commands a number of times proportional to swipe distance and direction.
+    Useful for unbounded controls such as altitude or heading where a fixed dataref range
+    is not appropriate.
     """
 
     ACTIVATION_NAME = "swipe"
     REQUIRED_DECK_ACTIONS = DECK_ACTIONS.SWIPE
 
-    PARAMETERS = PARAM_COMMAND_BLOCK
+    SWIPE_DEFAULT_STEP = 50      # pixels of swipe per command repeat
+    SWIPE_MIN_DISTANCE = 20      # pixels below which the gesture is ignored
+
+    PARAMETERS = {
+        "commands": {"type": "sub", "list": {
+            "up": {"type": "string", "label": "Swipe Up / Left", "hint": "Command fired when swiping up or left"},
+            "down": {"type": "string", "label": "Swipe Down / Right", "hint": "Command fired when swiping down or right"},
+        }},
+        "step": {"type": "float", "label": "Step (px)", "hint": "Pixels of swipe per command repeat (default 50)"},
+        "minimum-distance": {"type": "float", "label": "Min distance (px)", "hint": "Minimum swipe distance to trigger a command (default 20)"},
+    }
 
     def __init__(self, button: "Button"):
         Activation.__init__(self, button=button)
 
+        cmdname = ":".join([self.button.get_id(), type(self).__name__])
+        commands = self._config.get("commands", {}) or {}
+
+        def make_cmd(key):
+            val = commands.get(key)
+            return self.sim.instruction_factory(name=f"{cmdname}:{key}", instruction_block={CONFIG_KW.COMMAND.value: val}) if val else None
+
+        self._cmd_up = make_cmd("up")
+        self._cmd_down = make_cmd("down")
+        self._commands = [c for c in [self._cmd_up, self._cmd_down] if c is not None]
+
+        self.step = float(self._config.get("step", Swipe.SWIPE_DEFAULT_STEP))
+        self.minimum_distance = float(self._config.get("minimum-distance", Swipe.SWIPE_MIN_DISTANCE))
+
+    def is_valid(self):
+        if not self._commands:
+            logger.warning(f"button {self.button_name}: {type(self).__name__} has no commands defined")
+            return False
+        return super().is_valid()
+
     def activate(self, event) -> bool:
         if not self.can_handle(event):
             return False
-        logger.info(f"button {self.button_name} has no action (value={event})")
-        return True  # normal termination
+        # Only act on touch-end events that carry a start reference (completing a swipe)
+        if not isinstance(event, TouchEvent) or event.start is None:
+            return True
+        swipe = event.swipe(autorun=False)
+        if swipe is None or swipe.swipe_distance < self.minimum_distance:
+            return True
+        dx = swipe.end_pos_x - swipe.start_pos_x
+        dy = swipe.end_pos_y - swipe.start_pos_y
+        # Primary axis: whichever delta is larger drives the direction.
+        # Up (negative dy) or left (negative dx) → up command.
+        if abs(dy) >= abs(dx):
+            going_up = dy < 0
+        else:
+            going_up = dx < 0
+        cmd = self._cmd_up if going_up else self._cmd_down
+        if cmd is None:
+            return True
+        repeats = max(1, int(swipe.swipe_distance / self.step))
+        for _ in range(repeats):
+            cmd.execute()
+        logger.debug(f"button {self.button_name}: swipe {'up' if going_up else 'down'} distance={swipe.swipe_distance:.0f}px repeats={repeats}")
+        return True
 
     def describe(self) -> str:
-        """
-        Describe what the button does in plain English
-        """
-        return "\n\r".join(
-            [
-                f"This surface is used to monitor swipes of a finger over the surface.",
-                f"There currently is no handling of this type of activation.",
-            ]
-        )
+        lines = ["Swipe gesture activation — fires commands proportional to swipe distance."]
+        if self._cmd_up:
+            lines.append(f"Swipe up/left fires: {self._cmd_up} (×distance÷{self.step:.0f}px).")
+        if self._cmd_down:
+            lines.append(f"Swipe down/right fires: {self._cmd_down} (×distance÷{self.step:.0f}px).")
+        return "\n\r".join(lines)
 
 
 class EncoderMode(Activation, EncoderProperties):

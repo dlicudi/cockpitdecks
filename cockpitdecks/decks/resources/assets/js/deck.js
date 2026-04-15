@@ -20,10 +20,18 @@ const ASSET_IMAGE_PATH = "/assets/images/"
 const PAD = 16   // outer canvas padding (px)
 const GAP = 4    // gap between buttons (px)
 
+const SWIPE_STEP             = 20   // px of movement between incremental swipe events during drag
+const SWIPE_MIN              = 10   // px minimum remaining movement to send a final swipe on pointerup
+const SWIPE_EDGE_FRACTION    = 0.25 // top/bottom fraction of button that triggers hold-to-repeat
+const SWIPE_REPEAT_DELAY_MS  = 400  // ms before auto-repeat starts when holding an edge
+const SWIPE_REPEAT_PERIOD_MS = 150  // ms between repeated commands while holding
+
 const DEFAULT_USER_PREFERENCES = {
     highlight: "#ffffff10",
     flash:     "#0f80ffb0",
-    flash_duration: 100
+    flash_duration: 100,
+    click_sound:  true,
+    click_volume: 0.15
 }
 
 var USER_PREFERENCES = DEFAULT_USER_PREFERENCES
@@ -65,6 +73,19 @@ var Sound = (function () {
     };
 }());
 
+// Lazy AudioContext — created on first user gesture to satisfy browser autoplay policy.
+// On iOS Safari the context can be suspended after the page loses focus; resume it each time.
+var _audioCtx = null;
+function _getAudioCtx() {
+    if (!_audioCtx) {
+        _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (_audioCtx.state === 'suspended') {
+        _audioCtx.resume();
+    }
+    return _audioCtx;
+}
+
 // ─── LiveDeck — Canvas 2D deck renderer ───────────────────────────────────────
 
 class LiveDeck {
@@ -75,6 +96,12 @@ class LiveDeck {
         this.config   = config;
         this.deckType = config['deck-type-flat'];
         this.name     = config.name;
+
+        // Prevent iOS Safari text-selection, magnifier and scrolling gestures from cancelling pointers
+        this.canvas.style.touchAction = 'none';
+        this.canvas.style.userSelect = 'none';
+        this.canvas.style.webkitUserSelect = 'none';
+        this.canvas.style.webkitTouchCallout = 'none';
 
         USER_PREFERENCES = Object.assign({}, DEFAULT_USER_PREFERENCES, config[PRESENTATION_DEFAULTS]);
 
@@ -97,13 +124,45 @@ class LiveDeck {
         this._sliding        = false;
         this._sliderDragging = null;
 
+        // Client-side slider state
+        this._sliderMeta     = {};   // key → {fill, track, orientation, label}
+        this._sliderFrac     = {};   // key → current fraction 0..1
+        this._sliderLastSend = {};   // key → timestamp of last WebSocket send
+
+        // Server-flagged swipe buttons: keys whose activation type is 'swipe'.
+        // Used to prefer swipe mode over push when a button has both actions (e.g. iphone deck type).
+        this._swipeMeta      = {};   // key → true
+
+        // Server-flagged scroll buttons: keys whose activation type is 'sweep'.
+        // Grid buttons with sweep activation respond to mouse wheel events.
+        this._scrollMeta     = {};   // key → true
+
         this._computeLayout();
         this._setupEvents();
     }
 
     // ── Public API ─────────────────────────────────────────────────────────────
 
-    set_key_image(key, base64jpeg) {
+    set_key_image(key, base64jpeg, meta) {
+        // Store slider metadata so the client can render fill/handle locally.
+        if (meta && meta.slider) {
+            this._sliderMeta[key] = meta.slider;
+            if (meta.slider.fraction !== undefined && !(key in this._sliderFrac)) {
+                this._sliderFrac[key] = meta.slider.fraction;
+            }
+        }
+        // Track server-flagged swipe buttons so pointerdown prefers swipe over push.
+        if (meta && meta.swipe) {
+            this._swipeMeta[key] = true;
+        }
+        // Track server-flagged scroll buttons so wheel events reach grid buttons.
+        if (meta && meta.scroll) {
+            this._scrollMeta[key] = true;
+        }
+        // When a server image arrives during/after drag, sync fraction from X-Plane truth.
+        if (meta && meta.slider && meta.slider.fraction !== undefined && !this._sliderDragging) {
+            this._sliderFrac[key] = meta.slider.fraction;
+        }
         const img = new Image();
         img.onload = () => {
             this._images[key] = img;
@@ -113,12 +172,13 @@ class LiveDeck {
     }
 
     clear_images() {
-        this._images = {};
+        this._images     = {};
+        this._sliderMeta = {};
+        this._sliderFrac = {};
+        this._swipeMeta  = {};
+        this._scrollMeta = {};
         // Reset any span mutations so buttons that shrink back to 1×1 on the
         // new page aren't drawn at the previous page's larger dimensions.
-        // The server only sends span when > [1,1], so without this the old
-        // larger layout.w/h would persist and stretch the new image into
-        // adjacent squares, or leave old pixels uncovered.
         for (const [key, base] of Object.entries(this._baseLayout)) {
             if (this._layout[key]) {
                 this._layout[key].w = base.w;
@@ -148,6 +208,42 @@ class LiveDeck {
 
     play_sound(sound, type) {
         Sound('data:audio/' + type + ';base64,' + sound);
+    }
+
+    _playClick() {
+        if (!USER_PREFERENCES.click_sound) return;
+        try {
+            const ctx  = _getAudioCtx();
+            const gain = ctx.createGain();
+            const osc  = ctx.createOscillator();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(1200, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(400, ctx.currentTime + 0.03);
+            gain.gain.setValueAtTime(USER_PREFERENCES.click_volume, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.04);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start();
+            osc.stop(ctx.currentTime + 0.04);
+        } catch (_) {}
+    }
+
+    _playMicroClick() {
+        if (!USER_PREFERENCES.click_sound) return;
+        try {
+            const ctx  = _getAudioCtx();
+            const gain = ctx.createGain();
+            const osc  = ctx.createOscillator();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(2000, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(800, ctx.currentTime + 0.015);
+            gain.gain.setValueAtTime(USER_PREFERENCES.click_volume * 0.5, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.02);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start();
+            osc.stop(ctx.currentTime + 0.02);
+        } catch (_) {}
     }
 
     // ── Layout computation ─────────────────────────────────────────────────────
@@ -413,8 +509,137 @@ class LiveDeck {
     _blitButton(key) {
         const img    = this._images[key];
         const layout = this._layout[key];
-        if (!img || !layout) return;
-        this.ctx.drawImage(img, layout.x, layout.y, layout.w, layout.h);
+        if (!layout) return;
+        if (img) this.ctx.drawImage(img, layout.x, layout.y, layout.w, layout.h);
+        if (this._sliderMeta[key]) this._drawSliderOverlay(key, layout);
+    }
+
+    // ── Client-side slider overlay ─────────────────────────────────────────────
+
+    _drawSliderOverlay(key, layout) {
+        const meta = this._sliderMeta[key];
+        if (!meta) return;
+        const frac = Math.max(0, Math.min(1, this._sliderFrac[key] ?? 0));
+        const ctx  = this.ctx;
+        const {x, y, w, h} = layout;
+
+        const horiz = meta.orientation === 'horizontal';
+        const r = 8;
+
+        if (!horiz) {
+            // ── Vertical ──────────────────────────────────────────────────────
+            const margin = Math.round(w * 0.18);
+            const pad    = Math.round(h * 0.02);
+            const tx0 = x + margin;
+            const tx1 = x + w - margin;
+            const ty0 = y + pad;
+            const ty1 = y + h - pad;
+            const trackH = ty1 - ty0;
+            const fillH  = Math.round(trackH * frac);
+
+            // Fill (bottom-up)
+            if (fillH > 0) {
+                ctx.fillStyle = meta.fill || 'rgba(0,180,255,1)';
+                ctx.beginPath();
+                const fr = Math.min(r, fillH / 2);
+                if (ctx.roundRect) {
+                    ctx.roundRect(tx0, ty1 - fillH, tx1 - tx0, fillH, fr);
+                } else {
+                    ctx.rect(tx0, ty1 - fillH, tx1 - tx0, fillH);
+                }
+                ctx.fill();
+            }
+
+            // Handle bar
+            const hy = Math.max(ty0 + 4, Math.min(ty1 - 4, ty1 - fillH));
+            ctx.fillStyle = 'rgba(255,255,255,0.92)';
+            ctx.beginPath();
+            if (ctx.roundRect) {
+                ctx.roundRect(tx0 + 4, hy - 3, tx1 - tx0 - 8, 6, 3);
+            } else {
+                ctx.rect(tx0 + 4, hy - 3, tx1 - tx0 - 8, 6);
+            }
+            ctx.fill();
+
+            // Value text — fixed at top
+            const fontSize = Math.max(12, Math.round(h * 0.08));
+            ctx.fillStyle = 'white';
+            ctx.font = `bold ${fontSize}px sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            ctx.fillText(Math.round(frac * 100) + '%', x + w / 2, ty0 + 4);
+
+        } else {
+            // ── Horizontal ────────────────────────────────────────────────────
+            const pad  = Math.round(w * 0.02);
+            const midY = y + h / 2;
+            const barH = Math.round(h * 0.24);
+            const tx0  = x + pad;
+            const tx1  = x + w - pad;
+            const ty0  = midY - barH / 2;
+            const trackW = tx1 - tx0;
+            const fillW  = Math.round(trackW * frac);
+
+            if (fillW > 0) {
+                ctx.fillStyle = meta.fill || 'rgba(0,180,255,1)';
+                ctx.beginPath();
+                const fr = Math.min(r, fillW / 2);
+                if (ctx.roundRect) {
+                    ctx.roundRect(tx0, ty0, fillW, barH, fr);
+                } else {
+                    ctx.rect(tx0, ty0, fillW, barH);
+                }
+                ctx.fill();
+            }
+
+            const hx = Math.max(tx0 + 4, Math.min(tx1 - 4, tx0 + fillW));
+            ctx.fillStyle = 'rgba(255,255,255,0.92)';
+            ctx.beginPath();
+            if (ctx.roundRect) {
+                ctx.roundRect(hx - 3, ty0 + 4, 6, barH - 8, 3);
+            } else {
+                ctx.rect(hx - 3, ty0 + 4, 6, barH - 8);
+            }
+            ctx.fill();
+
+            const fontSize = Math.max(10, Math.round(h * 0.22));
+            ctx.fillStyle = 'white';
+            ctx.font = `bold ${fontSize}px sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(Math.round(frac * 100) + '%', tx1 - 8, midY);
+        }
+    }
+
+    // Returns 0..1 fraction from a pointer position within a button layout.
+    _sliderFracFromXY(layout, cx, cy) {
+        const horiz = layout.w > layout.h;
+        const pos   = horiz ? cx - layout.x : cy - layout.y;
+        const span  = horiz ? layout.w : layout.h;
+        let frac    = Math.max(0, Math.min(1, pos / span));
+        if (!horiz) frac = 1 - frac;
+        return frac;
+    }
+
+    // Throttle & trailing debounce — max 10 updates per second, ensures final value sent
+    _sendSliderThrottled(btnName, rawValue) {
+        const now = Date.now();
+        const limit = 75; // 75ms limit
+
+        if (!this._sliderDebounceTimers) this._sliderDebounceTimers = {};
+        
+        if (now - (this._sliderLastSend[btnName] || 0) >= limit) {
+            this._sliderLastSend[btnName] = now;
+            sendEvent(this.name, btnName, 9, {value: rawValue, ts: now});
+        }
+        
+        if (this._sliderDebounceTimers[btnName]) {
+            clearTimeout(this._sliderDebounceTimers[btnName]);
+        }
+        this._sliderDebounceTimers[btnName] = setTimeout(() => {
+            this._sliderLastSend[btnName] = Date.now();
+            sendEvent(this.name, btnName, 9, {value: rawValue, ts: Date.now()});
+        }, limit);
     }
 
     // ── Hit detection ──────────────────────────────────────────────────────────
@@ -465,7 +690,50 @@ class LiveDeck {
         const span  = horiz ? layout.w : layout.h;
         let frac    = Math.max(0, Math.min(1, pos / span));
         if (!horiz) frac = 1 - frac;
-        return range[0] + Math.round(frac * (range[1] - range[0]));
+        return range[0] + frac * (range[1] - range[0]);
+    }
+
+    // ── Swipe hold-to-repeat ──────────────────────────────────────────────────
+
+    // Returns -1 (top/up edge), +1 (bottom/down edge), or 0 (middle) for a
+    // relative position within a swipe button's layout rect.
+    _swipeEdgeZone(layout, rx, ry) {
+        const edgeH = layout.h * SWIPE_EDGE_FRACTION;
+        if (ry <= edgeH)             return -1;  // top → up
+        if (ry >= layout.h - edgeH)  return  1;  // bottom → down
+        return 0;
+    }
+
+    // Sends a synthetic code-10 + code-11 pair representing one step in the
+    // given direction (-1=up, +1=down) so Python's Swipe.activate fires normally.
+    _fireSwipeStep(btnName, direction) {
+        const sy = direction === -1 ? SWIPE_STEP : 0;
+        const ey = direction === -1 ? 0 : SWIPE_STEP;
+        this._playMicroClick();
+        sendEvent(this.name, btnName, 10, {x: 0, y: sy, ts: Date.now()});
+        sendEvent(this.name, btnName, 11, {x: 0, y: ey, ts: Date.now()});
+    }
+
+    _startSwipeRepeat(btnName, direction) {
+        this._stopSwipeRepeat();
+        this._swipeRepeatInitTimer = setTimeout(() => {
+            this._fireSwipeStep(btnName, direction);
+            this._swipeRepeatTimer = setInterval(
+                () => this._fireSwipeStep(btnName, direction),
+                SWIPE_REPEAT_PERIOD_MS
+            );
+        }, SWIPE_REPEAT_DELAY_MS);
+    }
+
+    _stopSwipeRepeat() {
+        if (this._swipeRepeatInitTimer) {
+            clearTimeout(this._swipeRepeatInitTimer);
+            this._swipeRepeatInitTimer = null;
+        }
+        if (this._swipeRepeatTimer) {
+            clearInterval(this._swipeRepeatTimer);
+            this._swipeRepeatTimer = null;
+        }
     }
 
     // ── Event wiring ───────────────────────────────────────────────────────────
@@ -476,42 +744,94 @@ class LiveDeck {
         // ── Pointer down ──────────────────────────────────────────────────────
         canvas.addEventListener('pointerdown', (e) => {
             e.preventDefault();
+            
+            // Reject secondary multitouch points while an interaction is ongoing
+            if (this._activePointerId !== null && this._activePointerId !== undefined) return;
+
             const [cx, cy] = this._canvasXY(e);
             const btn    = this._buttonAt(cx, cy);
             if (!btn) return;
+
+            this._activePointerId = e.pointerId;
+            if (e.pointerId !== undefined) {
+                canvas.setPointerCapture(e.pointerId);
+            }
+
             const layout = this._layout[btn.name];
 
-            this._pressing = btn;
-            this._sliding  = false;
+            this._pressing    = btn;
+            this._sliding     = false;
+            this._swipeAnchor = null;
 
-            if (this._hasAction(btn, 'push')) {
+            this._playClick();
+
+            // Check slider meta first: if this button is currently rendering a slider,
+            // treat it as a cursor interaction regardless of deck-type action order.
+            // This lets buttons that declare both 'cursor' and 'push' work correctly —
+            // push on non-slider pages, cursor on slider pages — without ambiguity.
+            if (this._sliderMeta[btn.name] || (!this._hasAction(btn, 'push') && !this._hasAction(btn, 'swipe') && this._hasAction(btn, 'cursor'))) {
+                canvas.style.cursor = layout.w > layout.h ? 'ew-resize' : 'ns-resize';
+                this._sliderDragging = { btn, layout };
+                const frac = this._sliderFracFromXY(layout, cx, cy);
+                this._sliderFrac[btn.name] = frac;
+                this._blitButton(btn.name);
+                this._sendSliderThrottled(btn.name, this._sliderValue(btn, layout, cx, cy));
+
+            } else if (this._swipeMeta[btn.name] || (!this._hasAction(btn, 'push') && this._hasAction(btn, 'swipe'))) {
+                // Server flagged this button as a swipe activation, or it has swipe but not push.
+                // Must be checked before the push branch so iphone-style decks (which give all
+                // buttons push+swipe) still enter swipe mode when the page config says swipe.
+                canvas.style.cursor = 'grab';
+                if (layout) {
+                    const [rx, ry] = this._relPos(layout, cx, cy);
+                    const zone = this._swipeEdgeZone(layout, rx, ry);
+                    if (zone !== 0) this._startSwipeRepeat(btn.name, zone);
+                }
+
+            } else if (this._hasAction(btn, 'push')) {
                 canvas.style.cursor = 'pointer';
                 sendEvent(this.name, btn.name, 1, {x: cx - layout.x, y: cy - layout.y, ts: Date.now()});
-
-            } else if (this._hasAction(btn, 'swipe')) {
-                canvas.style.cursor = 'grab';
-
-            } else if (this._hasAction(btn, 'cursor')) {
-                canvas.style.cursor = 'ns-resize';
-                this._sliderDragging = { btn, layout };
-                sendEvent(this.name, btn.name, 9, {x: cx, y: cy, value: this._sliderValue(btn, layout, cx, cy), ts: Date.now()});
             }
         }, { passive: false });
 
         // ── Pointer move ──────────────────────────────────────────────────────
         canvas.addEventListener('pointermove', (e) => {
             e.preventDefault();
+            if (this._activePointerId !== undefined && e.pointerId !== this._activePointerId) return;
+
             const [cx, cy] = this._canvasXY(e);
 
-            if (this._sliderDragging) return;
+            if (this._sliderDragging) {
+                const { btn, layout } = this._sliderDragging;
+                const frac = this._sliderFracFromXY(layout, cx, cy);
+                this._sliderFrac[btn.name] = frac;
+                this._blitButton(btn.name);
+                this._sendSliderThrottled(btn.name, this._sliderValue(btn, layout, cx, cy));
+                return;
+            }
 
-            if (this._pressing && this._hasAction(this._pressing, 'swipe') && !this._sliding) {
-                this._sliding = true;
-                canvas.style.cursor = 'grabbing';
+            if (this._pressing && this._hasAction(this._pressing, 'swipe')) {
                 const layout = this._layout[this._pressing.name];
                 if (layout) {
                     const [rx, ry] = this._relPos(layout, cx, cy);
-                    sendEvent(this.name, this._pressing.name, 10, {x: rx, y: ry, ts: Date.now()});
+                    if (!this._sliding) {
+                        // First move — enter sliding mode, cancel any hold-to-repeat timer
+                        this._stopSwipeRepeat();
+                        this._sliding     = true;
+                        this._swipeAnchor = {x: rx, y: ry};
+                        canvas.style.cursor = 'grabbing';
+                    } else if (this._swipeAnchor) {
+                        // Subsequent moves — fire incremental swipe when far enough from anchor
+                        const dx   = rx - this._swipeAnchor.x;
+                        const dy   = ry - this._swipeAnchor.y;
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+                        if (dist >= SWIPE_STEP) {
+                            this._playMicroClick();
+                            sendEvent(this.name, this._pressing.name, 10, {x: this._swipeAnchor.x, y: this._swipeAnchor.y, ts: Date.now()});
+                            sendEvent(this.name, this._pressing.name, 11, {x: rx, y: ry, ts: Date.now()});
+                            this._swipeAnchor = {x: rx, y: ry};
+                        }
+                    }
                 }
             }
 
@@ -526,15 +846,29 @@ class LiveDeck {
             }
         }, { passive: false });
 
-        // ── Pointer up ────────────────────────────────────────────────────────
-        canvas.addEventListener('pointerup', (e) => {
-            e.preventDefault();
+        // ── Pointer up & cancel ───────────────────────────────────────────────
+        const handlePointerUp = (e) => {
+            if (e.cancelable && e.type !== 'pointercancel') e.preventDefault();
+            if (this._activePointerId !== undefined && this._activePointerId !== null && e.pointerId !== this._activePointerId) return;
+
+            if (e.pointerId !== undefined && canvas.hasPointerCapture(e.pointerId)) {
+                canvas.releasePointerCapture(e.pointerId);
+            }
+            
+            this._activePointerId = null;
             const [cx, cy] = this._canvasXY(e);
             canvas.style.cursor = 'auto';
 
             if (this._sliderDragging) {
                 const { btn, layout } = this._sliderDragging;
-                sendEvent(this.name, btn.name, 9, {x: cx, y: cy, value: this._sliderValue(btn, layout, cx, cy), ts: Date.now()});
+                const frac = this._sliderFracFromXY(layout, cx, cy);
+                this._sliderFrac[btn.name] = frac;
+                this._blitButton(btn.name);
+                
+                if (this._sliderDebounceTimers && this._sliderDebounceTimers[btn.name]) {
+                    clearTimeout(this._sliderDebounceTimers[btn.name]);
+                }
+                sendEvent(this.name, btn.name, 9, {value: this._sliderValue(btn, layout, cx, cy), ts: Date.now()});
                 this._sliderDragging = null;
                 this._pressing = null;
                 return;
@@ -546,67 +880,79 @@ class LiveDeck {
 
             const layout = this._layout[btn.name];
 
-            if (this._hasAction(btn, 'push')) {
-                sendEvent(this.name, btn.name, 0, {x: cx - (layout?.x || 0), y: cy - (layout?.y || 0), ts: Date.now()});
+            this._stopSwipeRepeat();
+
+            // If a swipe gesture was in progress, send a final incremental event for
+            // any remaining movement since the last committed anchor position.
+            if (this._sliding && this._hasAction(btn, 'swipe')) {
+                if (layout && this._swipeAnchor) {
+                    const [rx, ry] = this._relPos(layout, cx, cy);
+                    const dx   = rx - this._swipeAnchor.x;
+                    const dy   = ry - this._swipeAnchor.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist >= SWIPE_MIN) {
+                        sendEvent(this.name, btn.name, 10, {x: this._swipeAnchor.x, y: this._swipeAnchor.y, ts: Date.now()});
+                        sendEvent(this.name, btn.name, 11, {x: rx, y: ry, ts: Date.now()});
+                    }
+                }
+                this._swipeAnchor = null;
+                this._sliding = false;
 
             } else if (this._hasAction(btn, 'swipe')) {
-                if (layout) {
-                    const [rx, ry] = this._relPos(layout, cx, cy);
-                    sendEvent(this.name, btn.name, this._sliding ? 11 : 14, {x: rx, y: ry, ts: Date.now()});
+                // If it supports swipe but we didn't slide, and it DOES NOT support push, send a generic press (code 14)
+                if (!this._hasAction(btn, 'push')) {
+                    if (layout) {
+                        const [rx, ry] = this._relPos(layout, cx, cy);
+                        sendEvent(this.name, btn.name, 14, {x: rx, y: ry, ts: Date.now()});
+                    }
                 }
                 this._sliding = false;
             }
-        }, { passive: false });
+
+            // Release push only if the button was actually activated as a push (not swipe mode).
+            if (this._hasAction(btn, 'push') && !this._swipeMeta[btn.name]) {
+                sendEvent(this.name, btn.name, 0, {x: cx - (layout?.x || 0), y: cy - (layout?.y || 0), ts: Date.now()});
+            }
+        };
+
+        canvas.addEventListener('pointerup', handlePointerUp, { passive: false });
+        canvas.addEventListener('pointercancel', handlePointerUp, { passive: false });
+        // Note: pointerout is intentionally NOT used as a release handler. With
+        // setPointerCapture active, pointerup fires on the canvas even when the
+        // pointer is outside its bounds, so pointerout is not needed as a fallback.
+        // Registering pointerout as handlePointerUp caused a double-release bug:
+        // it fired (and released capture) while the finger was still held after an
+        // accidental drag, so the subsequent pointerup never reached the canvas and
+        // the endCommand for begin-end-command buttons was silently dropped.
 
         // ── Wheel (encoder rotation) ───────────────────────────────────────────
         canvas.addEventListener('wheel', (e) => {
             e.preventDefault();
             const [cx, cy] = this._canvasXY(e);
-            const enc = this._encoderAt(cx, cy);
-            if (!enc) return;
-            const zone = this._encZones.find(z => z.name === enc.name);
             const step = 4;
-            if (e.deltaY > step) {
-                sendEvent(this.name, enc.name, 2, {x: cx - (zone?.x || 0), y: cy - (zone?.y || 0), ts: Date.now()});
-            } else if (e.deltaY < -step) {
-                sendEvent(this.name, enc.name, 3, {x: cx - (zone?.x || 0), y: cy - (zone?.y || 0), ts: Date.now()});
-            }
-        }, { passive: false });
-
-        // ── Touch (mobile) ────────────────────────────────────────────────────
-        canvas.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            const [cx, cy] = this._canvasXY(e);
-            const btn = this._buttonAt(cx, cy);
-            if (!btn) return;
-            this._pressing = btn;
-            this._sliding  = false;
-            if (this._hasAction(btn, 'swipe')) {
-                const layout = this._layout[btn.name];
-                if (layout) {
-                    const [rx, ry] = this._relPos(layout, cx, cy);
-                    sendEvent(this.name, btn.name, 10, {x: rx, y: ry, ts: Date.now()});
+            const enc = this._encoderAt(cx, cy);
+            if (enc) {
+                const zone = this._encZones.find(z => z.name === enc.name);
+                this._playClick();
+                if (e.deltaY > step) {
+                    sendEvent(this.name, enc.name, 2, {x: cx - (zone?.x || 0), y: cy - (zone?.y || 0), ts: Date.now()});
+                } else if (e.deltaY < -step) {
+                    sendEvent(this.name, enc.name, 3, {x: cx - (zone?.x || 0), y: cy - (zone?.y || 0), ts: Date.now()});
                 }
+                return;
+            }
+            // Grid buttons with sweep activation also respond to scroll.
+            // Scroll up (deltaY < 0) = forward = clockwise (2); scroll down = backward (3).
+            const btn = this._buttonAt(cx, cy);
+            if (!btn || !this._scrollMeta[btn.name]) return;
+            const layout = this._layout[btn.name] || {};
+            this._playClick();
+            if (e.deltaY < -step) {
+                sendEvent(this.name, btn.name, 2, {x: cx - (layout.x || 0), y: cy - (layout.y || 0), ts: Date.now()});
+            } else if (e.deltaY > step) {
+                sendEvent(this.name, btn.name, 3, {x: cx - (layout.x || 0), y: cy - (layout.y || 0), ts: Date.now()});
             }
         }, { passive: false });
 
-        canvas.addEventListener('touchend', (e) => {
-            e.preventDefault();
-            const btn = this._pressing;
-            this._pressing = null;
-            if (!btn) return;
-            const touch  = e.changedTouches[0];
-            const rect   = canvas.getBoundingClientRect();
-            const cx = (touch.clientX - rect.left) * canvas.width  / rect.width;
-            const cy = (touch.clientY - rect.top)  * canvas.height / rect.height;
-            const layout = this._layout[btn.name];
-            if (!layout) return;
-            const [rx, ry] = this._relPos(layout, cx, cy);
-            if (this._hasAction(btn, 'swipe')) {
-                sendEvent(this.name, btn.name, 11, {x: rx, y: ry, ts: Date.now()});
-            } else if (this._hasAction(btn, 'push')) {
-                sendEvent(this.name, btn.name, 14, {x: rx, y: ry, ts: Date.now()});
-            }
-        }, { passive: false });
     }
 }

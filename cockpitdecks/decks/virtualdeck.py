@@ -22,6 +22,7 @@ from cockpitdecks.buttons.representation import (
     Representation,
     IconBase,
 )  # valid representations for this type of deck
+from cockpitdecks.buttons.activation.deck_activation import Swipe as SwipeActivation, Sweep as SweepActivation
 
 
 logger = logging.getLogger(__name__)
@@ -210,7 +211,7 @@ class VirtualDeck(DeckWithIcons):
         if state in [9]:
             logger.debug(f"SlideEvent deck {self.name} key {key} = {state}")
             if data is not None and "value" in data:
-                SlideEvent(deck=self, button=key, value=int(data.get("value")), code=state)
+                SlideEvent(deck=self, button=key, value=float(data.get("value")), code=state)
                 return  # no other possible handling
             else:
                 logger.warning(f"deck {deck.name}: SliderEvent has no value ({data})")
@@ -238,7 +239,7 @@ class VirtualDeck(DeckWithIcons):
         payload = {"code": 2, "deck": self.name, "sound": base64.b64encode(content).decode("ascii"), "type": typ, "meta": meta}
         self.cockpit.send(deck=self.name, payload=payload)
 
-    def set_key_icon(self, key, image, span=None):
+    def set_key_icon(self, key, image, span=None, slider_meta=None, swipe_mode=False, scroll_mode=False):
         # Sends the PIL Image bytes with a few meta to Flask for web display
         # Image is sent as a stream of bytes which is the file content of the image saved in PNG format
         # Need to supply deck name as well.
@@ -272,7 +273,13 @@ class VirtualDeck(DeckWithIcons):
         # transformed = image.transpose(Image.Transpose.FLIP_TOP_BOTTOM)  # ?!
         image.save(img_byte_arr, format="PNG")
         content = img_byte_arr.getvalue()
-        meta = {"ts": datetime.now().timestamp()}  # dummy
+        meta = {"ts": datetime.now().timestamp()}
+        if slider_meta is not None:
+            meta["slider"] = slider_meta
+        if swipe_mode:
+            meta["swipe"] = True
+        if scroll_mode:
+            meta["scroll"] = True
         payload = {"code": 0, "deck": self.name, "key": key, "image": base64.b64encode(content).decode("ascii"), "meta": meta}
         if span is not None and isinstance(span, (list, tuple)) and len(span) == 2:
             sw, sh = int(span[0]), int(span[1])
@@ -348,7 +355,16 @@ class VirtualDeck(DeckWithIcons):
             image = image.resize(target_size, resample=Image.Resampling.LANCZOS)
 
         span = getattr(button, "_config", {}).get("span")
-        self.set_key_icon(button.index, image, span=span)
+        slider_meta = None
+        if hasattr(representation, "get_slider_meta"):
+            try:
+                slider_meta = representation.get_slider_meta()
+            except Exception:
+                pass
+        activation = getattr(button, "_activation", None)
+        swipe_mode = isinstance(activation, SwipeActivation)
+        scroll_mode = isinstance(activation, SweepActivation)
+        self.set_key_icon(button.index, image, span=span, slider_meta=slider_meta, swipe_mode=swipe_mode, scroll_mode=scroll_mode)
 
     def _set_hardware_image(self, button: Button):  # idx: int, image: str, label: str = None):
         if self.device is None:
