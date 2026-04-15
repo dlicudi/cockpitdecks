@@ -34,121 +34,104 @@ PARAM_CHART_DATA = {
     "dataref": {"type": "string", "prompt": "Data", "required": True},
 }
 
-# Button Drawing Parameters, loosely grouped per button type
+# Label fields — stored at the representation root (not inside the nested block).
+# IconBase reads label/label-* from self._config (the representation root), so these
+# must NOT carry storage_mode "nested_block".
+PARAM_LABEL = {
+    "label": {"label": "Label", "type": "string", "hint": "Text caption displayed on the button", "group": "Label", "sample": "ON"},
+    "label-color": {"label": "Label Color", "type": "color", "hint": "Color for the label text", "group": "Label"},
+    "label-font": {"label": "Label Font", "type": "font", "hint": "Font file for the label", "group": "Label"},
+    "label-size": {"label": "Label Size", "type": "integer", "hint": "Font size for the label", "group": "Label"},
+    "label-position": {"label": "Label Position", "type": "choice", "choices": ["lt", "ct", "rt", "lm", "cm", "rm", "lb", "cb", "rb"], "hint": "Alignment of the label on the button", "group": "Label"},
+}
+
+# Position/scale overrides for nested-block switch representations.
+# SwitchBase reads these from self.switch (the nested config block), so they must be
+# written into that block — hence storage_mode "nested_block".
+PARAM_SWITCH_POSITION = {
+    "scale": {"label": "Scale", "type": "float", "hint": "Scale factor for the drawn element (0.5–2.0)", "group": "Layout", "storage_mode": "nested_block"},
+    "left": {"label": "Shift Left", "type": "integer", "hint": "Shift drawing left (pixels)", "group": "Layout", "storage_mode": "nested_block"},
+    "right": {"label": "Shift Right", "type": "integer", "hint": "Shift drawing right (pixels)", "group": "Layout", "storage_mode": "nested_block"},
+    "up": {"label": "Shift Up", "type": "integer", "hint": "Shift drawing up (pixels)", "group": "Layout", "storage_mode": "nested_block"},
+    "down": {"label": "Shift Down", "type": "integer", "hint": "Shift drawing down (pixels)", "group": "Layout", "storage_mode": "nested_block"},
+}
+
+# Button Drawing Parameters, loosely grouped per button type.
+# All entries carry storage_mode "nested_block" because every representation that uses
+# PARAM_BTN_COMMON stores its config inside a named nested block (switch:, circular-switch:, etc.).
+_NB = "nested_block"
 
 PARAM_BTN_COMMON = {
-    "button-fill-color": {"label": "Button Fill Color", "type": "color", "hint": "Background color of the button circular base", "group": "Appearance"},
-    "button-size": {"label": "Button Size", "type": "int", "hint": "Diameter/scale of the button base", "group": "Appearance"},
-    "button-stroke-color": {"label": "Button Stroke Color", "type": "color", "hint": "Border color of the button base", "group": "Appearance"},
-    "button-stroke-width": {"label": "Button Stroke Width", "type": "int", "hint": "Width of the base border", "group": "Appearance"},
-    "button-underline-color": {"label": "Button Underline Color", "type": "color", "hint": "Color for decorative underline", "group": "Appearance"},
-    "button-underline-width": {"label": "Button Underline Width", "type": "int", "hint": "Width of decorative underline (0 to disable)", "group": "Appearance"},
-    "base-fill-color": {"label": "Base Fill Color", "type": "color", "hint": "Color for the switch baseplate", "group": "Appearance"},
-    "base-stroke-color": {"label": "Base Stroke Color", "type": "color", "hint": "Color for the baseplate border", "group": "Appearance"},
-    "base-stroke-width": {"label": "Base Stroke Width", "type": "int", "hint": "Width of the baseplate border", "group": "Appearance"},
-    "base-underline-color": {"label": "Base Underline Color", "type": "color", "hint": "Color for the baseplate decorative underline", "group": "Appearance"},
-    "base-underline-width": {"label": "Base Underline Width", "type": "int", "hint": "Width of the baseplate decorative underline", "group": "Appearance"},
-    "handle-fill-color": {"label": "Handle Fill Color", "type": "color", "hint": "Primary color of the switch handle/lever", "group": "Appearance"},
-    "handle-stroke-color": {"label": "Handle Stroke Color", "type": "color", "hint": "Color for the handle border", "group": "Appearance"},
-    "handle-stroke-width": {"label": "Handle Stroke Width", "type": "int", "hint": "Width of the handle border", "group": "Appearance"},
-    "top-fill-color": {"label": "Top Fill Color", "type": "color", "hint": "Color for the top cap of the handle", "group": "Appearance"},
-    "top-stroke-color": {"label": "Top Stroke Color", "type": "color", "hint": "Border color for the top cap", "group": "Appearance"},
-    "top-stroke-width": {"label": "Top Stroke Width", "type": "int", "hint": "Width of the top cap border", "group": "Appearance"},
-    "tick-from": {"label": "Tick From", "type": "string", "hint": "Starting angle (degrees) for the scale arc", "group": "Style", "sample": "-120"},
-    "tick-to": {"label": "Tick To", "type": "string", "hint": "Ending angle (degrees) for the scale arc", "group": "Style", "sample": "120"},
-    "tick-labels": {"type": "sub", "list": {"-label": {"type": "string", "label": "Position label"}}, "min": 1, "max": 0, "hint": "Label for each position (one per line in form)", "group": "Style", "sample": '[{"-label": "OFF"}, {"-label": "ON"}]'},
-    "tick-color": {"label": "Tick Color", "type": "color", "hint": "Color for scale graduation marks", "group": "Ticks"},
-    "tick-label-color": {"label": "Tick Label Color", "type": "color", "hint": "Color for graduation mark labels", "group": "Ticks"},
-    "tick-label-size": {"label": "Tick Label Size", "type": "int", "hint": "Font size for graduation labels", "group": "Ticks"},
-    "tick-label-space": {"label": "Tick Label Space", "type": "string", "hint": "Distance from tick to label", "group": "Ticks"},
-    "tick-length": {"label": "Tick Length", "type": "int", "hint": "Length of graduation marks", "group": "Ticks"},
-    "tick-space": {"label": "Tick Space", "type": "string", "hint": "Distance from base to graduation marks", "group": "Ticks"},
-    "tick-underline-color": {"label": "Tick Underline Color", "type": "color", "hint": "Color for decorative scale underline", "group": "Ticks"},
-    "tick-underline-width": {"label": "Tick Underline Width", "type": "int", "hint": "Width of decorative scale underline", "group": "Ticks"},
-    "tick-width": {"label": "Tick Width", "type": "int", "hint": "Width/thickness of graduation marks", "group": "Ticks"},
-    "needle-color": {"label": "Needle Color", "type": "color", "hint": "Color for the switch pointer/needle", "group": "Needle"},
-    "needle-length": {"label": "Needle Length", "type": "int", "hint": "Length of the pointer", "group": "Needle"},
-    "needle-start": {"label": "Needle Start", "type": "string", "hint": "Distance from center to start of needle", "group": "Needle"},
-    "needle-tip-size": {"label": "Needle Tip Size", "type": "int", "hint": "Size of the pointer tip (arrow/ball)", "group": "Needle"},
-    "needle-underline-color": {"label": "Needle Underline Color", "type": "color", "hint": "Color for decorative needle underline", "group": "Needle"},
-    "needle-underline-width": {"label": "Needle Underline Width", "type": "int", "hint": "Width of decorative needle underline", "group": "Needle"},
-    "needle-width": {"label": "Needle Width", "type": "int", "hint": "Width/thickness of the pointer", "group": "Needle"},
+    "button-fill-color": {"label": "Button Fill Color", "type": "color", "hint": "Background color of the button circular base", "group": "Appearance", "storage_mode": _NB},
+    "button-size": {"label": "Button Size", "type": "int", "hint": "Diameter/scale of the button base", "group": "Appearance", "storage_mode": _NB},
+    "button-stroke-color": {"label": "Button Stroke Color", "type": "color", "hint": "Border color of the button base", "group": "Appearance", "storage_mode": _NB},
+    "button-stroke-width": {"label": "Button Stroke Width", "type": "int", "hint": "Width of the base border", "group": "Appearance", "storage_mode": _NB},
+    "button-underline-color": {"label": "Button Underline Color", "type": "color", "hint": "Color for decorative underline", "group": "Appearance", "storage_mode": _NB},
+    "button-underline-width": {"label": "Button Underline Width", "type": "int", "hint": "Width of decorative underline (0 to disable)", "group": "Appearance", "storage_mode": _NB},
+    "base-fill-color": {"label": "Base Fill Color", "type": "color", "hint": "Color for the switch baseplate", "group": "Appearance", "storage_mode": _NB},
+    "base-stroke-color": {"label": "Base Stroke Color", "type": "color", "hint": "Color for the baseplate border", "group": "Appearance", "storage_mode": _NB},
+    "base-stroke-width": {"label": "Base Stroke Width", "type": "int", "hint": "Width of the baseplate border", "group": "Appearance", "storage_mode": _NB},
+    "base-underline-color": {"label": "Base Underline Color", "type": "color", "hint": "Color for the baseplate decorative underline", "group": "Appearance", "storage_mode": _NB},
+    "base-underline-width": {"label": "Base Underline Width", "type": "int", "hint": "Width of the baseplate decorative underline", "group": "Appearance", "storage_mode": _NB},
+    "handle-fill-color": {"label": "Handle Fill Color", "type": "color", "hint": "Primary color of the switch handle/lever", "group": "Appearance", "storage_mode": _NB},
+    "handle-stroke-color": {"label": "Handle Stroke Color", "type": "color", "hint": "Color for the handle border", "group": "Appearance", "storage_mode": _NB},
+    "handle-stroke-width": {"label": "Handle Stroke Width", "type": "int", "hint": "Width of the handle border", "group": "Appearance", "storage_mode": _NB},
+    "top-fill-color": {"label": "Top Fill Color", "type": "color", "hint": "Color for the top cap of the handle", "group": "Appearance", "storage_mode": _NB},
+    "top-stroke-color": {"label": "Top Stroke Color", "type": "color", "hint": "Border color for the top cap", "group": "Appearance", "storage_mode": _NB},
+    "top-stroke-width": {"label": "Top Stroke Width", "type": "int", "hint": "Width of the top cap border", "group": "Appearance", "storage_mode": _NB},
+    "tick-from": {"label": "Tick From", "type": "string", "hint": "Starting angle (degrees) for the scale arc", "group": "Style", "sample": "-120", "storage_mode": _NB},
+    "tick-to": {"label": "Tick To", "type": "string", "hint": "Ending angle (degrees) for the scale arc", "group": "Style", "sample": "120", "storage_mode": _NB},
+    "tick-labels": {"type": "sub", "list": {"-label": {"type": "string", "label": "Position label"}}, "min": 1, "max": 0, "hint": "Label for each position (one per line in form)", "group": "Style", "sample": '[{"-label": "OFF"}, {"-label": "ON"}]', "storage_mode": _NB},
+    "tick-color": {"label": "Tick Color", "type": "color", "hint": "Color for scale graduation marks", "group": "Ticks", "storage_mode": _NB},
+    "tick-label-color": {"label": "Tick Label Color", "type": "color", "hint": "Color for graduation mark labels", "group": "Ticks", "storage_mode": _NB},
+    "tick-label-font": {"label": "Tick Label Font", "type": "font", "hint": "Font for graduation mark labels (falls back to label-font)", "group": "Ticks", "storage_mode": _NB},
+    "tick-label-size": {"label": "Tick Label Size", "type": "int", "hint": "Font size for graduation labels", "group": "Ticks", "storage_mode": _NB},
+    "tick-label-space": {"label": "Tick Label Space", "type": "string", "hint": "Distance from tick to label", "group": "Ticks", "storage_mode": _NB},
+    "tick-length": {"label": "Tick Length", "type": "int", "hint": "Length of graduation marks", "group": "Ticks", "storage_mode": _NB},
+    "tick-space": {"label": "Tick Space", "type": "string", "hint": "Distance from base to graduation marks", "group": "Ticks", "storage_mode": _NB},
+    "tick-underline-color": {"label": "Tick Underline Color", "type": "color", "hint": "Color for decorative scale underline", "group": "Ticks", "storage_mode": _NB},
+    "tick-underline-width": {"label": "Tick Underline Width", "type": "int", "hint": "Width of decorative scale underline", "group": "Ticks", "storage_mode": _NB},
+    "tick-width": {"label": "Tick Width", "type": "int", "hint": "Width/thickness of graduation marks", "group": "Ticks", "storage_mode": _NB},
+    "needle-color": {"label": "Needle Color", "type": "color", "hint": "Color for the switch pointer/needle", "group": "Needle", "storage_mode": _NB},
+    "needle-length": {"label": "Needle Length", "type": "int", "hint": "Length of the pointer", "group": "Needle", "storage_mode": _NB},
+    "needle-start": {"label": "Needle Start", "type": "string", "hint": "Distance from center to start of needle", "group": "Needle", "storage_mode": _NB},
+    "needle-tip-size": {"label": "Needle Tip Size", "type": "int", "hint": "Size of the pointer tip (arrow/ball)", "group": "Needle", "storage_mode": _NB},
+    "needle-underline-color": {"label": "Needle Underline Color", "type": "color", "hint": "Color for decorative needle underline", "group": "Needle", "storage_mode": _NB},
+    "needle-underline-width": {"label": "Needle Underline Width", "type": "int", "hint": "Width of decorative needle underline", "group": "Needle", "storage_mode": _NB},
+    "needle-width": {"label": "Needle Width", "type": "int", "hint": "Width/thickness of the pointer", "group": "Needle", "storage_mode": _NB},
 }
 
 PARAM_BTN_SWITCH = {
-    "switch-style": {"label": "Switch Style", "type": "string", "hint": "Visual style: 'round', 'rect', or '3dot'", "group": "Style", "sample": "round"},
-    "switch-length": {"label": "Switch Length", "type": "int", "hint": "Total length of the switch lever", "group": "Appearance"},
-    "switch-width": {"label": "Switch Width", "type": "int", "hint": "Width/thickness of the switch lever", "group": "Appearance"},
-    "switch-handle-dot-color": {"label": "Handle Dot Color", "type": "color", "hint": "Color for the indicator dot on the switch handle", "group": "Appearance"},
+    "switch-style": {"label": "Switch Style", "type": "choice", "choices": ["round", "rect", "3dot"], "hint": "Visual style of the switch handle", "group": "Style", "sample": "round", "storage_mode": _NB},
+    "switch-length": {"label": "Switch Length", "type": "int", "hint": "Total length of the switch lever", "group": "Appearance", "storage_mode": _NB},
+    "switch-width": {"label": "Switch Width", "type": "int", "hint": "Width/thickness of the switch lever", "group": "Appearance", "storage_mode": _NB},
+    "switch-handle-dot-color": {"label": "Handle Dot Color", "type": "color", "hint": "Color for the indicator dot on the switch handle", "group": "Appearance", "storage_mode": _NB},
 }
 
 PARAM_BTN_CIRCULAR_SWITCH = {
-    "angle-start": {"label": "Angle Start", "type": "int", "hint": "Starting angle of the switch arc in degrees (0 = 12 o'clock, increasing clockwise)", "group": "Style"},
-    "angle-end": {"label": "Angle End", "type": "int", "hint": "Ending angle of the switch arc in degrees (0 = 12 o'clock, increasing clockwise)", "group": "Style"},
-    "ticks": {"type": "list", "list": "string", "label": "Ticks", "hint": "One label per stop, in order. Replaces tick-labels and determines stop count.", "group": "Style"},
+    "angle-start": {"label": "Angle Start", "type": "int", "hint": "Starting angle in degrees (0 = 12 o'clock, clockwise)", "group": "Style", "storage_mode": _NB},
+    "angle-end": {"label": "Angle End", "type": "int", "hint": "Ending angle in degrees (0 = 12 o'clock, clockwise)", "group": "Style", "storage_mode": _NB},
+    "ticks": {"type": "list", "list": "string", "label": "Ticks", "hint": "One label per stop, in order. Determines stop count.", "group": "Style", "storage_mode": _NB},
 }
 
 PARAM_BTN_PUSH = {
-    "witness-fill-color": {"label": "Witness Fill Color", "type": "color"},
-    "witness-fill-off-color": {"label": "Witness Fill Off Color", "type": "color"},
-    "witness-size": {"label": "Witness Size", "type": "int"},
-    "witness-stroke-color": {"label": "Witness Stroke Color", "type": "color"},
-    "witness-stroke-off-color": {"label": "Witness Stroke Off Color", "type": "color"},
-    "witness-stroke-off-width": {"label": "Witness Stroke Off Width", "type": "int"},
-    "witness-stroke-width": {"label": "Witness Stroke Width", "type": "int"},
+    "witness-fill-color": {"label": "Witness Fill Color", "type": "color", "storage_mode": _NB},
+    "witness-fill-off-color": {"label": "Witness Fill Off Color", "type": "color", "storage_mode": _NB},
+    "witness-size": {"label": "Witness Size", "type": "int", "storage_mode": _NB},
+    "witness-stroke-color": {"label": "Witness Stroke Color", "type": "color", "storage_mode": _NB},
+    "witness-stroke-off-color": {"label": "Witness Stroke Off Color", "type": "color", "storage_mode": _NB},
+    "witness-stroke-off-width": {"label": "Witness Stroke Off Width", "type": "int", "storage_mode": _NB},
+    "witness-stroke-width": {"label": "Witness Stroke Width", "type": "int", "storage_mode": _NB},
 }
 
 PARAM_BTN_KNOB = {
-    "button-dent-extension": {"label": "Button Dent Extension", "type": "string"},
-    "button-dent-negative": {"label": "Button Dent Negative", "type": "string"},
-    "button-dent-size": {"label": "Button Dent Size", "type": "int"},
-    "button-dents": {"label": "Button Dents", "type": "string"},
-    "knob-mark": {"label": "Knob Mark", "type": "string"},
-    "knob-type": {"label": "Knob Type", "type": "string"},
-    "mark-underline-color": {"label": "Mark Underline Color", "type": "color"},
-    "mark-underline-outer": {"label": "Mark Underline Outer", "type": "string"},
-    "mark-underline-width": {"label": "Mark Underline Width", "type": "int"},
+    "button-dent-extension": {"label": "Button Dent Extension", "type": "string", "storage_mode": _NB},
+    "button-dent-negative": {"label": "Button Dent Negative", "type": "string", "storage_mode": _NB},
+    "button-dent-size": {"label": "Button Dent Size", "type": "int", "storage_mode": _NB},
+    "button-dents": {"label": "Button Dents", "type": "string", "storage_mode": _NB},
+    "knob-mark": {"label": "Knob Mark", "type": "string", "storage_mode": _NB},
+    "knob-type": {"label": "Knob Type", "type": "string", "storage_mode": _NB},
+    "mark-underline-color": {"label": "Mark Underline Color", "type": "color", "storage_mode": _NB},
+    "mark-underline-outer": {"label": "Mark Underline Outer", "type": "string", "storage_mode": _NB},
+    "mark-underline-width": {"label": "Mark Underline Width", "type": "int", "storage_mode": _NB},
 }
-
-# aircraft
-# annunciator
-# annunciator-animate
-# chart
-# colored-led
-# data
-# decor
-# draw-animation
-# draw-base
-# icon
-# icon-animation
-# icon-color
-# led
-# multi-icons
-# multi-texts
-# none
-# text
-
-# special:
-# ftg
-# solari
-# virtual-led
-# virtual-encoder
-# weather-base
-# weather-metar
-# weather-real
-# weather-xp
-# textpage
-
-# TO DO
-
-# knob
-# circular-switch
-# push-switch
-# switch
-# switch-base
-
-# special
-# encoder-leds
-# fcu
-# fma
-# side

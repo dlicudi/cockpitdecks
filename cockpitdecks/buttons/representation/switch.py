@@ -10,7 +10,7 @@ from PIL import Image, ImageDraw
 
 from cockpitdecks.resources.color import convert_color, grey
 from .draw import DrawBase, ICON_SIZE  # explicit Icon from file to avoid circular import
-from .parameters import PARAM_BTN_COMMON, PARAM_BTN_SWITCH, PARAM_BTN_CIRCULAR_SWITCH, PARAM_BTN_PUSH, PARAM_BTN_KNOB
+from .parameters import PARAM_BTN_COMMON, PARAM_BTN_SWITCH, PARAM_BTN_CIRCULAR_SWITCH, PARAM_BTN_PUSH, PARAM_BTN_KNOB, PARAM_LABEL, PARAM_SWITCH_POSITION
 
 logger = logging.getLogger(__name__)
 # logger.setLevel(logging.DEBUG)
@@ -58,7 +58,7 @@ class SwitchBase(DrawBase):
 
     REPRESENTATION_NAME = "switch-base"
 
-    PARAMETERS = DrawBase.PARAMETERS | PARAM_BTN_COMMON
+    PARAMETERS = DrawBase.PARAMETERS | PARAM_BTN_COMMON | PARAM_LABEL | PARAM_SWITCH_POSITION
 
     def __init__(self, button: "Button", switch_type: str):
         DrawBase.__init__(self, button=button)

@@ -29,10 +29,11 @@ class DrawBase(IconBase):
     TRANSPARENT_PNG_COLOR = TRANSPARENT_PNG_COLOR
 
     PARAMETERS = IconBase.PARAMETERS | {
-        "up": {"type": "integer", "prompt": "Up"},
-        "down": {"type": "integer", "prompt": "Down"},
-        "Left": {"type": "integer", "prompt": "Left"},
-        "Right": {"type": "integer", "prompt": "Right"},
+        "scale": {"type": "float", "prompt": "Scale", "hint": "Scale factor for the drawn element (0.5–2.0)", "group": "Layout"},
+        "up": {"type": "integer", "prompt": "Up", "hint": "Shift drawing up (pixels)", "group": "Layout"},
+        "down": {"type": "integer", "prompt": "Down", "hint": "Shift drawing down (pixels)", "group": "Layout"},
+        "left": {"type": "integer", "prompt": "Left", "hint": "Shift drawing left (pixels)", "group": "Layout"},
+        "right": {"type": "integer", "prompt": "Right", "hint": "Shift drawing right (pixels)", "group": "Layout"},
     }
 
     def __init__(self, button: "Button"):
