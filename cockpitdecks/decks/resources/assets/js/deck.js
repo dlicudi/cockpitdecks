@@ -131,7 +131,10 @@ class LiveDeck {
 
         // Server-flagged swipe buttons: keys whose activation type is 'swipe'.
         // Used to prefer swipe mode over push when a button has both actions (e.g. iphone deck type).
-        this._swipeMeta      = {};   // key → true
+        this._swipeMeta        = {};   // key → num_stops (truthy)
+        this._swipeDragSteps   = {};   // key → step count in current gesture
+        this._swipeDragDir     = {};   // key → last direction (true=forward, false=backward)
+        this._swipeCurrentStop = {};   // key → current stop index (synced from server)
 
         // Server-flagged scroll buttons: keys whose activation type is 'sweep'.
         // Grid buttons with sweep activation respond to mouse wheel events.
@@ -153,7 +156,10 @@ class LiveDeck {
         }
         // Track server-flagged swipe buttons so pointerdown prefers swipe over push.
         if (meta && meta.swipe) {
-            this._swipeMeta[key] = true;
+            this._swipeMeta[key] = meta.stops || 2;
+            if (meta.current_stop !== undefined) {
+                this._swipeCurrentStop[key] = meta.current_stop;
+            }
         }
         // Track server-flagged scroll buttons so wheel events reach grid buttons.
         if (meta && meta.scroll) {
@@ -175,7 +181,10 @@ class LiveDeck {
         this._images     = {};
         this._sliderMeta = {};
         this._sliderFrac = {};
-        this._swipeMeta  = {};
+        this._swipeMeta        = {};
+        this._swipeDragSteps   = {};
+        this._swipeDragDir     = {};
+        this._swipeCurrentStop = {};
         this._scrollMeta = {};
         // Reset any span mutations so buttons that shrink back to 1×1 on the
         // new page aren't drawn at the previous page's larger dimensions.
@@ -707,6 +716,18 @@ class LiveDeck {
     // Sends a synthetic code-10 + code-11 pair representing one step in the
     // given direction (-1=up, +1=down) so Python's Swipe.activate fires normally.
     _fireSwipeStep(btnName, direction) {
+        const isForward = direction === -1;  // up = forward
+        const stops   = this._swipeMeta[btnName] || 2;
+        const curStop = this._swipeCurrentStop[btnName];
+        const wouldChange = curStop === undefined
+            || (isForward && curStop < stops - 1)
+            || (!isForward && curStop > 0);
+        if (!wouldChange) return;
+        if (curStop !== undefined) {
+            this._swipeCurrentStop[btnName] = isForward
+                ? Math.min(curStop + 1, stops - 1)
+                : Math.max(curStop - 1, 0);
+        }
         const sy = direction === -1 ? SWIPE_STEP : 0;
         const ey = direction === -1 ? 0 : SWIPE_STEP;
         this._playMicroClick();
@@ -782,6 +803,8 @@ class LiveDeck {
                 // Must be checked before the push branch so iphone-style decks (which give all
                 // buttons push+swipe) still enter swipe mode when the page config says swipe.
                 canvas.style.cursor = 'grab';
+                this._swipeDragSteps[btn.name] = 0;
+                this._swipeDragDir[btn.name]   = null;
                 if (layout) {
                     const [rx, ry] = this._relPos(layout, cx, cy);
                     const zone = this._swipeEdgeZone(layout, rx, ry);
@@ -826,9 +849,32 @@ class LiveDeck {
                         const dy   = ry - this._swipeAnchor.y;
                         const dist = Math.sqrt(dx * dx + dy * dy);
                         if (dist >= SWIPE_STEP) {
-                            this._playMicroClick();
-                            sendEvent(this.name, this._pressing.name, 10, {x: this._swipeAnchor.x, y: this._swipeAnchor.y, ts: Date.now()});
-                            sendEvent(this.name, this._pressing.name, 11, {x: rx, y: ry, ts: Date.now()});
+                            const isForward = Math.abs(dy) >= Math.abs(dx) ? dy < 0 : dx > 0;
+                            const btnName   = this._pressing.name;
+                            const stops     = this._swipeMeta[btnName] || 2;
+                            const prevDir   = this._swipeDragDir[btnName];
+                            if (prevDir !== null && prevDir !== isForward) {
+                                this._swipeDragSteps[btnName] = 0;  // direction reversed
+                            }
+                            this._swipeDragDir[btnName] = isForward;
+                            const stepCount = this._swipeDragSteps[btnName] || 0;
+                            if (stepCount < 1) {
+                                const curStop = this._swipeCurrentStop[btnName];
+                                const wouldChange = curStop === undefined
+                                    || (isForward && curStop < stops - 1)
+                                    || (!isForward && curStop > 0);
+                                if (wouldChange) {
+                                    this._playMicroClick();
+                                    if (curStop !== undefined) {
+                                        this._swipeCurrentStop[btnName] = isForward
+                                            ? Math.min(curStop + 1, stops - 1)
+                                            : Math.max(curStop - 1, 0);
+                                    }
+                                }
+                                this._swipeDragSteps[btnName] = stepCount + 1;
+                                sendEvent(this.name, btnName, 10, {x: this._swipeAnchor.x, y: this._swipeAnchor.y, ts: Date.now()});
+                                sendEvent(this.name, btnName, 11, {x: rx, y: ry, ts: Date.now()});
+                            }
                             this._swipeAnchor = {x: rx, y: ry};
                         }
                     }
@@ -885,12 +931,27 @@ class LiveDeck {
             // If a swipe gesture was in progress, send a final incremental event for
             // any remaining movement since the last committed anchor position.
             if (this._sliding && this._hasAction(btn, 'swipe')) {
-                if (layout && this._swipeAnchor) {
+                const alreadyStepped = (this._swipeDragSteps[btn.name] || 0) >= 1;
+                if (layout && this._swipeAnchor && !alreadyStepped) {
                     const [rx, ry] = this._relPos(layout, cx, cy);
                     const dx   = rx - this._swipeAnchor.x;
                     const dy   = ry - this._swipeAnchor.y;
                     const dist = Math.sqrt(dx * dx + dy * dy);
                     if (dist >= SWIPE_MIN) {
+                        const isForward = Math.abs(dy) >= Math.abs(dx) ? dy < 0 : dx > 0;
+                        const stops  = this._swipeMeta[btn.name] || 2;
+                        const curStop = this._swipeCurrentStop[btn.name];
+                        const wouldChange = curStop === undefined
+                            || (isForward && curStop < stops - 1)
+                            || (!isForward && curStop > 0);
+                        if (wouldChange) {
+                            this._playMicroClick();
+                            if (curStop !== undefined) {
+                                this._swipeCurrentStop[btn.name] = isForward
+                                    ? Math.min(curStop + 1, stops - 1)
+                                    : Math.max(curStop - 1, 0);
+                            }
+                        }
                         sendEvent(this.name, btn.name, 10, {x: this._swipeAnchor.x, y: this._swipeAnchor.y, ts: Date.now()});
                         sendEvent(this.name, btn.name, 11, {x: rx, y: ry, ts: Date.now()});
                     }
@@ -899,8 +960,16 @@ class LiveDeck {
                 this._sliding = false;
 
             } else if (this._hasAction(btn, 'swipe')) {
-                // If it supports swipe but we didn't slide, and it DOES NOT support push, send a generic press (code 14)
-                if (!this._hasAction(btn, 'push')) {
+                if (this._swipeMeta[btn.name]) {
+                    // Server-flagged swipe/sweep button tapped (no slide): send zero-distance
+                    // touch pair so Python handles it as a tap → _advance().
+                    if (layout) {
+                        const [rx, ry] = this._relPos(layout, cx, cy);
+                        sendEvent(this.name, btn.name, 10, {x: rx, y: ry, ts: Date.now()});
+                        sendEvent(this.name, btn.name, 11, {x: rx, y: ry, ts: Date.now()});
+                    }
+                } else if (!this._hasAction(btn, 'push')) {
+                    // Swipe-only button (no push action): send generic press code 14
                     if (layout) {
                         const [rx, ry] = this._relPos(layout, cx, cy);
                         sendEvent(this.name, btn.name, 14, {x: rx, y: ry, ts: Date.now()});

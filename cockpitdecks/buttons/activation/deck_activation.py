@@ -12,7 +12,7 @@ from cockpitdecks import CONFIG_KW, DECK_KW, DECK_ACTIONS
 from cockpitdecks.resources.intvariables import COCKPITDECKS_INTVAR
 from .activation import Activation
 
-from .parameters import PARAM_DECK, PARAM_INITIAL_VALUE, PARAM_PUSH_AUTOREPEAT, PARAM_COMMAND_BLOCK
+from .parameters import PARAM_DECK, PARAM_INITIAL_VALUE, PARAM_PUSH_AUTOREPEAT, PARAM_COMMAND_BLOCK, PARAM_SETVALUE_BLOCK
 
 logger = logging.getLogger(__name__)
 # from cockpitdecks import SPAM
@@ -560,6 +560,70 @@ class ShortOrLongpress(Activation):
 
 
 # UpDown has been merged into Sweep (type: sweep with N commands in positional list)
+
+
+class PushValue(Activation):
+    """
+    Push button that maintains a numeric value and writes it to a dataref on each press.
+    Each press advances the value by `step`; when it would exceed `value-max` it wraps back
+    to `value-min`. Requires `set-dataref`.
+
+    Default parameters (step=1, value-min=0, value-max=1) give a simple 0/1 toggle.
+    """
+
+    ACTIVATION_NAME = "push-value"
+    EDITOR_FAMILY = "Push Button"
+    EDITOR_LABEL = "Push Value"
+    REQUIRED_DECK_ACTIONS = [DECK_ACTIONS.PRESS, DECK_ACTIONS.LONGPRESS, DECK_ACTIONS.PUSH]
+
+    PARAMETERS = PARAM_INITIAL_VALUE | PARAM_SETVALUE_BLOCK | {
+        "step": {"type": "float", "label": "Step", "default-value": 1},
+        "value-min": {"type": "float", "label": "Minimum Value", "default-value": 0},
+        "value-max": {"type": "float", "label": "Maximum Value", "default-value": 1},
+    }
+
+    def __init__(self, button: "Button"):
+        Activation.__init__(self, button=button)
+        self.step = float(button._config.get("step", 1))
+        self.value_min = float(button._config.get("value-min", 0))
+        self.value_max = float(button._config.get("value-max", 1))
+        self.current_value = float(self.initial_value) if self.initial_value is not None else self.value_min
+        self._inited = True
+
+    def is_valid(self):
+        if self._set_sim_data is None:
+            logger.error(f"button {self.button_name}: {type(self).__name__} has no set-dataref")
+            return False
+        return super().is_valid()
+
+    def activate(self, event) -> bool:
+        if not self.can_handle(event):
+            return False
+        if not super().activate(event):
+            return False
+        if event.pressed:
+            x = self.current_value + self.step
+            if x > self.value_max:
+                x = self.value_min
+            self.current_value = x
+        return True
+
+    def get_activation_value(self):
+        return self.current_value
+
+    def get_state_variables(self) -> dict:
+        return {
+            "step": self.step,
+            "value_min": self.value_min,
+            "value_max": self.value_max,
+            "value": self.current_value,
+        } | Activation.get_state_variables(self)
+
+    def describe(self) -> str:
+        a = [f"Each press advances the value by {self.step} in [{self.value_min}–{self.value_max}], wrapping around."]
+        if self._set_sim_data is not None:
+            a.append(f"The value is written to dataref {self._set_sim_data.name}.")
+        return "\n\r".join(a)
 
 
 #

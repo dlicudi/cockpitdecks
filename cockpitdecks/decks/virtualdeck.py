@@ -239,7 +239,7 @@ class VirtualDeck(DeckWithIcons):
         payload = {"code": 2, "deck": self.name, "sound": base64.b64encode(content).decode("ascii"), "type": typ, "meta": meta}
         self.cockpit.send(deck=self.name, payload=payload)
 
-    def set_key_icon(self, key, image, span=None, slider_meta=None, swipe_mode=False, scroll_mode=False):
+    def set_key_icon(self, key, image, span=None, slider_meta=None, swipe_mode=False, swipe_stops=None, swipe_current_stop=None, scroll_mode=False):
         # Sends the PIL Image bytes with a few meta to Flask for web display
         # Image is sent as a stream of bytes which is the file content of the image saved in PNG format
         # Need to supply deck name as well.
@@ -278,6 +278,10 @@ class VirtualDeck(DeckWithIcons):
             meta["slider"] = slider_meta
         if swipe_mode:
             meta["swipe"] = True
+        if swipe_stops is not None:
+            meta["stops"] = swipe_stops
+        if swipe_current_stop is not None:
+            meta["current_stop"] = swipe_current_stop
         if scroll_mode:
             meta["scroll"] = True
         payload = {"code": 0, "deck": self.name, "key": key, "image": base64.b64encode(content).decode("ascii"), "meta": meta}
@@ -362,9 +366,11 @@ class VirtualDeck(DeckWithIcons):
             except Exception:
                 pass
         activation = getattr(button, "_activation", None)
-        swipe_mode = isinstance(activation, SwipeActivation)
+        swipe_mode = isinstance(activation, (SwipeActivation, SweepActivation))
+        swipe_stops = activation.num_stops if swipe_mode else None
+        swipe_current_stop = activation.get_activation_value() if swipe_mode else None
         scroll_mode = isinstance(activation, SweepActivation)
-        self.set_key_icon(button.index, image, span=span, slider_meta=slider_meta, swipe_mode=swipe_mode, scroll_mode=scroll_mode)
+        self.set_key_icon(button.index, image, span=span, slider_meta=slider_meta, swipe_mode=swipe_mode, swipe_stops=swipe_stops, swipe_current_stop=swipe_current_stop, scroll_mode=scroll_mode)
 
     def _set_hardware_image(self, button: Button):  # idx: int, image: str, label: str = None):
         if self.device is None:
