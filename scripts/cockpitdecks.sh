@@ -4,11 +4,13 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VENV="$ROOT_DIR/.venv"
 
-if [[ ! -d "$VENV" ]]; then
-  echo "[run] venv not found at $VENV"
-  echo "[run] create it first: python3 -m venv $VENV && $VENV/bin/pip install -e '.[development,streamdeck,loupedeck,weather]'"
+if ! command -v uv &>/dev/null; then
+  echo "[run] uv not found — install it: https://docs.astral.sh/uv/getting-started/installation/"
   exit 1
 fi
+
+echo "[run] syncing dependencies..."
+uv sync --all-extras --project "$ROOT_DIR" --quiet
 
 # Ensure libhidapi is visible for StreamDeck USB access.
 BREW_BIN=""
