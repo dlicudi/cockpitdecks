@@ -1,18 +1,18 @@
 # Hardware button demo
 buttons:
-  - index: b2
-    type: onoff
-    colored-led: [255, 128, 0]
-    dataref: data:b2-onoff
-    set-dataref: data:b2-onoff
-  - index: e4
-    name: encoder4
-    type: encoder-value
-    step: 1
-    value: 0
-    value-min: 0
-    value-max: 13
-    dataref: data:_enc0
-    set-dataref: data:_enc0
+- index: b2
+  type: onoff
+  dataref: data:b2-onoff
+  set-dataref: data:b2-onoff
+  color: [255, 128, 0]
+- index: e4
+  name: encoder4
+  type: encoder-value
+  step: 1
+  value: 0
+  value-min: 0
+  value-max: 13
+  dataref: data:_enc0
+  set-dataref: data:_enc0
     # formula: ${data:_enc0}
-    encoder-leds: 0
+  encoder-leds: 0
