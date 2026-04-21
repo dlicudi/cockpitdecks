@@ -1,0 +1,95 @@
+# ###########################################
+#
+# Build
+#
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build]
+include = [
+  "/cockpitdecks_wm"
+]
+
+[tool.hatch.version]
+path = "cockpitdecks_wm/__init__.py"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+
+# ###########################################
+#
+# Project
+#
+[project]
+name = "cockpitdecks_wm"
+
+authors = [
+  { name="Pierre M.", email="pierre@devleaks.be" },
+  { name="Duane Licudi", email="dlicudi@gmail.com" }
+]
+
+description = "Cockpitdecks weather icons"
+
+readme = "README.md"
+
+license = {file = "LICENCE"}
+
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Games/Entertainment :: Simulation",
+]
+
+requires-python = ">=3.10"
+
+dependencies = [
+    "cockpitdecks",
+    "pillow~=12.0",
+    "requests-cache~=1.2.1",
+    "ruamel.yaml>=0.19.1,<0.20",
+    "avwx-engine~=1.9.0",
+    "scipy",
+    "suntime",
+    "timezonefinder",
+    "metar~=1.11.0",
+    "pytaf~=1.2.1",
+    "python-metar~=1.4.0",
+    "tabulate~=0.9.0"
+]
+
+dynamic = [
+    "version"
+]
+
+[project.urls]
+Homepage = "https://github.com/dlicudi/cockpitdecks"
+Documentation = "https://devleaks.github.io/cockpitdecks-docs/"
+Issues = "https://github.com/dlicudi/cockpitdecks/issues"
+Source = "https://github.com/dlicudi/cockpitdecks"
+
+
+[tool.uv.sources]
+cockpitdecks = { workspace = true }
+
+[tool.ruff]
+line-length = 160
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "W",
+]
+ignore = []
+
+[tool.ruff.format]
+docstring-code-format = true
+
+[tool.black]
+line-length = 160
+
+[tool.flake8]
+max-line-length = 160

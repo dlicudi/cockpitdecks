@@ -1,0 +1,85 @@
+# ###########################################
+#
+# Project
+#
+[project]
+name = "xpwebapi"
+
+authors = [
+  { name="Pierre M.", email="pierre@devleaks.be" }
+]
+
+description = "Python Wrapper for Laminar Research X-Plane Web API"
+
+readme = "README.md"
+
+license = {file = "LICENCE"}
+
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Games/Entertainment :: Simulation",
+]
+
+requires-python = ">=3.12"
+# (using type)
+
+dependencies = [
+    "ifaddr~=0.2",
+    "natsort~=8.4",
+    "packaging~=25.0",
+    "requests~=2.32",
+    "simple-websocket~=1.1",
+]
+
+dynamic = [
+    "version"
+]
+
+[project.optional-dependencies]
+dev = [
+    "mkdocs",
+    "mkdocs-material",
+    "mkdocstrings",
+    "mkdocstrings-python",
+    "types-requests",
+    "types-Werkzeug"
+]
+
+[project.urls]
+Homepage = "https://github.com/dlicudi/cockpitdecks"
+Documentation = "https://devleaks.github.io/cockpitdecks-docs/"
+Issues = "https://github.com/dlicudi/cockpitdecks/issues"
+Source = "https://github.com/dlicudi/cockpitdecks"
+
+[tool.ruff]
+line-length = 160
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "W",
+]
+ignore = []
+
+[tool.black]
+line-length = 160
+
+[tool.flake8]
+max-line-length = 160
+
+# ###########################################
+#
+# Build
+#
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "xpwebapi/__init__.py"
+
+[tool.hatch.metadata]
+allow-direct-references = true

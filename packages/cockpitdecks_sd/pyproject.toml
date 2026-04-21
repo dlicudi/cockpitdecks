@@ -1,0 +1,88 @@
+# ###########################################
+#
+# Build
+#
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build]
+include = [
+  "/cockpitdecks_sd",
+  "/cockpitdecks_sd/decks/resources/types/*.yaml",
+  "/cockpitdecks_sd/decks/resources/images/*.png",
+]
+
+[tool.hatch.version]
+path = "cockpitdecks_sd/__init__.py"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+
+# ###########################################
+#
+# Project
+#
+[project]
+name = "cockpitdecks_sd"
+
+authors = [
+  { name="Pierre M.", email="pierre@devleaks.be" },
+  { name="Duane Licudi", email="dlicudi@gmail.com" }
+]
+
+description = "Cockpitdecks for Stream Decks"
+
+readme = "README.md"
+
+license = {file = "LICENCE"}
+
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Games/Entertainment :: Simulation",
+]
+
+requires-python = ">=3.10"
+
+dependencies = [
+    "cockpitdecks",
+    "pillow~=12.0",
+    "streamdeck @ git+https://github.com/dlicudi/python-elgato-streamdeck.git"
+]
+
+dynamic = [
+    "version"
+]
+
+[project.urls]
+Homepage = "https://github.com/dlicudi/cockpitdecks"
+Documentation = "https://devleaks.github.io/cockpitdecks-docs/"
+Issues = "https://github.com/dlicudi/cockpitdecks/issues"
+Source = "https://github.com/dlicudi/cockpitdecks"
+
+
+[tool.uv.sources]
+cockpitdecks = { workspace = true }
+
+[tool.ruff]
+line-length = 160
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "W",
+]
+ignore = []
+
+[tool.ruff.format]
+docstring-code-format = true
+
+[tool.black]
+line-length = 160
+
+[tool.flake8]
+max-line-length = 160
