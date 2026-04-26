@@ -560,6 +560,27 @@ def register_web_control(
         cockpit.reload_deck(name)
         return {"status": "ok"}
 
+    @app.route("/api/watch", methods=["GET", "POST"])
+    def api_watch():
+        cockpit = get_cockpit()
+        if request.method == "GET":
+            enabled = getattr(cockpit, "_watch_config", False) if cockpit is not None else get_runtime_config().get("watch_config", False)
+            return jsonify({"watch_config": bool(enabled)})
+        data = request.get_json(silent=True) or {}
+        enabled = bool(data.get("watch_config", False))
+        rc = get_runtime_config()
+        rc["watch_config"] = enabled
+        persist_runtime_config(rc)
+        if cockpit is not None:
+            cockpit._watch_config = enabled
+            if enabled:
+                acpath = getattr(cockpit.aircraft, "acpath", None) if cockpit.aircraft is not None else None
+                if acpath:
+                    cockpit._start_file_watcher(acpath)
+            else:
+                cockpit._stop_file_watcher()
+        return jsonify({"status": "ok", "watch_config": enabled})
+
     @app.route("/api/target", methods=["GET", "POST"])
     def api_target():
         cockpit = get_cockpit()

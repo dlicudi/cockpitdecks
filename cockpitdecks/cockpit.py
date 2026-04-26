@@ -32,6 +32,15 @@ from packaging.requirements import Requirement
 from PIL import Image, ImageFont
 
 try:
+    from watchdog.observers import Observer as _WatchdogObserver
+    from watchdog.events import FileSystemEventHandler as _FileSystemEventHandler
+    _HAS_WATCHDOG = True
+except ImportError:
+    _WatchdogObserver = None
+    _FileSystemEventHandler = object
+    _HAS_WATCHDOG = False
+
+try:
     from cairosvg import svg2png
 except Exception as exc:
     _svg2png_import_error = exc
@@ -509,6 +518,37 @@ class CockpitPlaySoundInstruction(CockpitInstruction):
 # but also the aircraft. So in 1 dataref, 2 informations: aircraft and livery!
 
 
+class _DeckConfigWatcher(_FileSystemEventHandler):
+    """Debounced watchdog handler that enqueues a deck reload on any deckconfig YAML change."""
+
+    def __init__(self, cockpit: "Cockpit") -> None:
+        if _HAS_WATCHDOG:
+            super().__init__()
+        self._cockpit = cockpit
+        self._timer: threading.Timer | None = None
+        self._lock = threading.Lock()
+
+    def _schedule_reload(self) -> None:
+        with self._lock:
+            if self._timer is not None:
+                self._timer.cancel()
+            self._timer = threading.Timer(0.5, self._fire)
+            self._timer.daemon = True
+            self._timer.start()
+
+    def _fire(self) -> None:
+        logger.info("deckconfig file changed, reloading decks")
+        self._cockpit.reload_decks()
+
+    def on_modified(self, event) -> None:
+        if not event.is_directory and str(event.src_path).endswith(".yaml"):
+            self._schedule_reload()
+
+    def on_created(self, event) -> None:
+        if not event.is_directory and str(event.src_path).endswith(".yaml"):
+            self._schedule_reload()
+
+
 class CockpitBase:
     """As used in Simulator"""
 
@@ -546,7 +586,7 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
     Main entry points to initialize, start (run()) and stop (terminate()) Cockpitdecks.
     """
 
-    def __init__(self, environ: Config | dict):
+    def __init__(self, environ: Config | dict, watch_config: bool = False):
         self._startup_time = datetime.now()
 
         CockpitBase.__init__(self)
@@ -702,6 +742,9 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
 
         # Internal variables
         self.reload_operation = threading.Lock()
+
+        self._watch_config = watch_config
+        self._file_watcher_observer = None
 
         self.default_pages = None  # current pages on decks when reloading
         self.client_list = None
@@ -1830,6 +1873,8 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
         with self.reload_operation:
             self.aircraft.start(acpath)
         # self.add_aircraft_resources() called in above
+        if self._watch_config and acpath:
+            self._start_file_watcher(acpath)
         self.run(release)
 
     # Utility function
@@ -1978,9 +2023,12 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
                 self.aircraft.change_livery(path=liverypath)
 
             logger.info(f"aircraft changed to {acname}, {acpath}, starting asynchronously..")
+            self._stop_file_watcher()
             with self.reload_operation:
                 self.sim.aircraft_changed()
                 self.aircraft.start(acpath=acpath)
+            if self._watch_config and acpath:
+                self._start_file_watcher(acpath)
             logger.info("..started")
 
     def load_pages(self):
@@ -2008,6 +2056,32 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
             for name, deck in self.decks.items():
                 deck.reload_page()
             logger.info("..reloaded")
+
+    def _start_file_watcher(self, acpath: str) -> None:
+        if not _HAS_WATCHDOG:
+            logger.warning("watchdog not installed; file watching disabled (pip install 'cockpitdecks[watch]')")
+            return
+        self._stop_file_watcher()
+        deckconfig_path = os.path.join(acpath, CONFIG_FOLDER)
+        if not os.path.isdir(deckconfig_path):
+            logger.debug(f"deckconfig path not found, not watching: {deckconfig_path}")
+            return
+        handler = _DeckConfigWatcher(self)
+        observer = _WatchdogObserver()
+        observer.schedule(handler, deckconfig_path, recursive=True)
+        observer.start()
+        self._file_watcher_observer = observer
+        logger.info(f"watching {deckconfig_path} for config changes")
+
+    def _stop_file_watcher(self) -> None:
+        if self._file_watcher_observer is not None:
+            try:
+                self._file_watcher_observer.stop()
+                self._file_watcher_observer.join(timeout=2.0)
+            except Exception:
+                pass
+            self._file_watcher_observer = None
+            logger.debug("file watcher stopped")
 
     def reload_deck(self, deck_name: str, just_do_it: bool = False):
         """
@@ -2081,8 +2155,11 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
                 if deck.is_virtual_deck():
                     if deck.clients > 0:
                         self.client_list[name] = deck.clients
+            self._stop_file_watcher()
             with self.reload_operation:
                 self.aircraft.start(self.aircraft.acpath)
+            if self._watch_config and self.aircraft.acpath:
+                self._start_file_watcher(self.aircraft.acpath)
             logger.info("..done")
         else:
             self.event_queue.put("reload")
@@ -2095,6 +2172,7 @@ class Cockpit(VariableListener, InstructionFactory, InstructionPerformer, Cockpi
         """
         if just_do_it:
             logger.info("stopping decks..")
+            self._stop_file_watcher()
             self.terminate_all()
         else:
             self.event_queue.put("stop")

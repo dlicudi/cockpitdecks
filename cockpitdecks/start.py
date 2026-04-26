@@ -168,6 +168,7 @@ def runtime_config_defaults() -> dict:
         "simulator_host": None,
         "launch_log": None,
         "logging": {"console": True, "log_level_filter": "DEBUG"},
+        "watch_config": False,
     }
 
 
@@ -179,6 +180,7 @@ RUNTIME_CONFIG_KEYS = {
     "simulator_host",
     "launch_log",
     "logging",
+    "watch_config",
 }
 
 
@@ -186,7 +188,7 @@ def merge_runtime_config(data: dict | None) -> dict:
     merged = runtime_config_defaults()
     if not isinstance(data, dict):
         return merged
-    for key in ("deck_paths", "target", "simulator_host", "launch_log"):
+    for key in ("deck_paths", "target", "simulator_host", "launch_log", "watch_config"):
         if key in data:
             merged[key] = data.get(key)
     for key in ("xplane_api", "cockpitdecks_server", "logging"):
@@ -601,7 +603,7 @@ def start_cockpit_runtime() -> None:
     try:
         set_runtime_state("starting", "Initializing Cockpitdecks..")
         logger.info("Initializing Cockpitdecks..")
-        cockpit = Cockpit(environ=environment)
+        cockpit = Cockpit(environ=environment, watch_config=bool(runtime_config.get("watch_config", False)))
         logger.info("..initialized\n")
 
         start_acpath = AIRCRAFT_HOME

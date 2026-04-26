@@ -55,6 +55,8 @@ demoext = ["cockpitdecks_ext"]
 streamdeck = ["cockpitdecks_sd"]
 loupedeck = ["cockpitdecks_ld"]
 xtouchmini = ["cockpitdecks_bx"]
+# File watching
+watch = ["watchdog>=3.0"]
 # For developer only
 development = [
     "types-click",

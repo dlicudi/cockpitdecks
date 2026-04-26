@@ -322,6 +322,9 @@ streamdeck = [
 toliss = [
     { name = "cockpitdecks-tl" },
 ]
+watch = [
+    { name = "watchdog" },
+]
 weather = [
     { name = "cockpitdecks-wm" },
 ]
@@ -360,8 +363,9 @@ requires-dist = [
     { name = "types-tabulate", marker = "extra == 'development'" },
     { name = "types-werkzeug", marker = "extra == 'development'" },
     { name = "usb-monitor", specifier = "~=1.23" },
+    { name = "watchdog", marker = "extra == 'watch'", specifier = ">=3.0" },
 ]
-provides-extras = ["demoext", "development", "loupedeck", "streamdeck", "toliss", "weather", "xplane", "xtouchmini"]
+provides-extras = ["demoext", "development", "loupedeck", "streamdeck", "toliss", "watch", "weather", "xplane", "xtouchmini"]
 
 [[package]]
 name = "cockpitdecks-bx"
