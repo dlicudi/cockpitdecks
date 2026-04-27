@@ -49,7 +49,7 @@ requires-python = ">=3.10"
 
 dependencies = [
     "cockpitdecks",
-    "loupedeck @ git+https://github.com/dlicudi/python-loupedeck-live.git@v1.5.1",
+    "loupedeck @ git+https://github.com/dlicudi/python-loupedeck-live.git@v1.5.2",
     "pillow~=12.0",
 ]
 
