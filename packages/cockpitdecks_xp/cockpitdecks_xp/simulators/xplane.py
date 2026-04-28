@@ -26,9 +26,9 @@ from cockpitdecks.observable import Observables, Observable
 from cockpitdecks.cockpit import CockpitInstruction
 
 # from ..resources.beacon import XPlaneBeacon, BEACON_DATA_KW
-from xpwebapi import beacon as XPlaneBeacon, DATAREF_DATATYPE
-from xpwebapi.api import Dataref as DatarefAPI, Command as CommandAPI
-from xpwebapi.ws import XPWebsocketAPI, CALLBACK_TYPE
+from cockpitdecks_xpwebapi import beacon as XPlaneBeacon, DATAREF_DATATYPE
+from cockpitdecks_xpwebapi.api import Dataref as DatarefAPI, Command as CommandAPI
+from cockpitdecks_xpwebapi.ws import XPWebsocketAPI, CALLBACK_TYPE
 from ..resources.daytimeobs import DaytimeObservable
 
 logger = logging.getLogger(__name__)

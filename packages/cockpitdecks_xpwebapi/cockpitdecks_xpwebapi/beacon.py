@@ -123,7 +123,7 @@ class XPBeaconMonitor:
 
     Usage;
     ```python
-    import xpwebapi
+    import cockpitdecks_xpwebapi
 
     def callback(connected: bool, beacon_data: xpwebapi.BeaconData, same_host: bool):
         print("reachable" if connected else "unreachable")

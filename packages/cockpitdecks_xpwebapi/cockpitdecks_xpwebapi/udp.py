@@ -19,7 +19,7 @@ from typing import Tuple, Dict, Callable
 
 from .api import API, CONNECTION_STATUS, DatarefValueType, Dataref, Command
 from .beacon import BeaconData, BEACON_TIMEOUT
-from xpwebapi import beacon
+from cockpitdecks_xpwebapi import beacon
 
 # local logging
 logger = logging.getLogger(__name__)

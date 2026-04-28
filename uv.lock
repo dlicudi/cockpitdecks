@@ -12,7 +12,7 @@ members = [
     "cockpitdecks-tl",
     "cockpitdecks-wm",
     "cockpitdecks-xp",
-    "xpwebapi",
+    "cockpitdecks-xpwebapi",
 ]
 
 [[package]]
@@ -405,7 +405,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "cockpitdecks", editable = "." },
-    { name = "loupedeck", git = "https://github.com/dlicudi/python-loupedeck-live.git?rev=v1.5.1" },
+    { name = "loupedeck", git = "https://github.com/dlicudi/python-loupedeck-live.git?rev=v1.5.2" },
     { name = "pillow", specifier = "~=12.0" },
 ]
 
@@ -485,8 +485,8 @@ source = { editable = "packages/cockpitdecks_xp" }
 dependencies = [
     { name = "avwx-engine", extra = ["scipy"] },
     { name = "cockpitdecks" },
+    { name = "cockpitdecks-xpwebapi" },
     { name = "metar" },
-    { name = "xpwebapi" },
 ]
 
 [package.optional-dependencies]
@@ -498,11 +498,48 @@ development = [
 requires-dist = [
     { name = "avwx-engine", extras = ["scipy"], specifier = "~=1.9.0" },
     { name = "cockpitdecks", editable = "." },
+    { name = "cockpitdecks-xpwebapi", editable = "packages/cockpitdecks_xpwebapi" },
     { name = "metar", specifier = "~=1.11.0" },
     { name = "tabulate", marker = "extra == 'development'", specifier = "~=0.9.0" },
-    { name = "xpwebapi", editable = "packages/xpwebapi" },
 ]
 provides-extras = ["development"]
+
+[[package]]
+name = "cockpitdecks-xpwebapi"
+source = { editable = "packages/cockpitdecks_xpwebapi" }
+dependencies = [
+    { name = "ifaddr" },
+    { name = "natsort" },
+    { name = "packaging" },
+    { name = "requests" },
+    { name = "simple-websocket" },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "mkdocs" },
+    { name = "mkdocs-material" },
+    { name = "mkdocstrings" },
+    { name = "mkdocstrings-python" },
+    { name = "types-requests" },
+    { name = "types-werkzeug" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "ifaddr", specifier = "~=0.2" },
+    { name = "mkdocs", marker = "extra == 'dev'" },
+    { name = "mkdocs-material", marker = "extra == 'dev'" },
+    { name = "mkdocstrings", marker = "extra == 'dev'" },
+    { name = "mkdocstrings-python", marker = "extra == 'dev'" },
+    { name = "natsort", specifier = "~=8.4" },
+    { name = "packaging", specifier = "~=25.0" },
+    { name = "requests", specifier = "~=2.32" },
+    { name = "simple-websocket", specifier = "~=1.1" },
+    { name = "types-requests", marker = "extra == 'dev'" },
+    { name = "types-werkzeug", marker = "extra == 'dev'" },
+]
+provides-extras = ["dev"]
 
 [[package]]
 name = "colorama"
@@ -721,8 +758,8 @@ wheels = [
 
 [[package]]
 name = "loupedeck"
-version = "1.5.1"
-source = { git = "https://github.com/dlicudi/python-loupedeck-live.git?rev=v1.5.1#993be01f9f7665276199f92789c9a1a8c2db6fb0" }
+version = "1.5.2"
+source = { git = "https://github.com/dlicudi/python-loupedeck-live.git?rev=v1.5.2#14548746ba7c4dccd729e38b015ac4df9fba1768" }
 dependencies = [
     { name = "numpy" },
     { name = "pillow" },
@@ -1666,43 +1703,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/19/70/80f3b7c10d2630aa6
 wheels = [
     { url = "https://files.pythonhosted.org/packages/38/34/98a2f52245f4d47be93b580dae5f9861ef58977d73a79eb47c58f1ad1f3a/xmltodict-1.0.4-py3-none-any.whl", hash = "sha256:a4a00d300b0e1c59fc2bfccb53d7b2e88c32f200df138a0dd2229f842497026a", size = 13580, upload-time = "2026-02-22T02:21:21.039Z" },
 ]
-
-[[package]]
-name = "xpwebapi"
-source = { editable = "packages/xpwebapi" }
-dependencies = [
-    { name = "ifaddr" },
-    { name = "natsort" },
-    { name = "packaging" },
-    { name = "requests" },
-    { name = "simple-websocket" },
-]
-
-[package.optional-dependencies]
-dev = [
-    { name = "mkdocs" },
-    { name = "mkdocs-material" },
-    { name = "mkdocstrings" },
-    { name = "mkdocstrings-python" },
-    { name = "types-requests" },
-    { name = "types-werkzeug" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "ifaddr", specifier = "~=0.2" },
-    { name = "mkdocs", marker = "extra == 'dev'" },
-    { name = "mkdocs-material", marker = "extra == 'dev'" },
-    { name = "mkdocstrings", marker = "extra == 'dev'" },
-    { name = "mkdocstrings-python", marker = "extra == 'dev'" },
-    { name = "natsort", specifier = "~=8.4" },
-    { name = "packaging", specifier = "~=25.0" },
-    { name = "requests", specifier = "~=2.32" },
-    { name = "simple-websocket", specifier = "~=1.1" },
-    { name = "types-requests", marker = "extra == 'dev'" },
-    { name = "types-werkzeug", marker = "extra == 'dev'" },
-]
-provides-extras = ["dev"]
 
 [[package]]
 name = "xtouchmini"
