@@ -5,7 +5,6 @@ import sys
 import importlib
 
 sys.path.insert(0, os.path.abspath(os.getcwd()))
-sys.path.insert(0, os.path.abspath(os.path.join(os.getcwd(), "..", "xplane-webapi")))
 
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 
@@ -87,14 +86,14 @@ def _bundle_all_matching(directory: str, suffix: str, group_name: str) -> None:
 
 def _assert_local_imports():
     expected_roots = {
-        "cockpitdecks": os.path.join(_WORKSPACE, "cockpitdecks"),
-        "cockpitdecks_xp": os.path.join(_WORKSPACE, "cockpitdecks_xp"),
-        "cockpitdecks_ld": os.path.join(_WORKSPACE, "cockpitdecks_ld"),
-        "cockpitdecks_sd": os.path.join(_WORKSPACE, "cockpitdecks_sd"),
-        "cockpitdecks_wm": os.path.join(_WORKSPACE, "cockpitdecks_wm"),
-        "cockpitdecks_ext": os.path.join(_WORKSPACE, "cockpitdecks_ext"),
-        "cockpitdecks_bx": os.path.join(_WORKSPACE, "cockpitdecks_bx"),
-        "xpwebapi": os.path.join(_WORKSPACE, "xplane-webapi"),
+        "cockpitdecks": _ROOT,
+        "cockpitdecks_xp": os.path.join(_ROOT, "packages", "cockpitdecks_xp"),
+        "cockpitdecks_ld": os.path.join(_ROOT, "packages", "cockpitdecks_ld"),
+        "cockpitdecks_sd": os.path.join(_ROOT, "packages", "cockpitdecks_sd"),
+        "cockpitdecks_wm": os.path.join(_ROOT, "packages", "cockpitdecks_wm"),
+        "cockpitdecks_ext": os.path.join(_ROOT, "packages", "cockpitdecks_ext"),
+        "cockpitdecks_bx": os.path.join(_ROOT, "packages", "cockpitdecks_bx"),
+        "cockpitdecks_xpwebapi": os.path.join(_ROOT, "packages", "cockpitdecks_xpwebapi"),
         "Loupedeck": os.path.join(_WORKSPACE, "python-loupedeck-live"),
     }
     failures = []
@@ -121,8 +120,7 @@ _assert_local_imports()
 for pkg in [
     "cockpitdecks",
     "cockpitdecks_xp",
-    # Explicit: always bundle from the same import path as `python -c "import xpwebapi"` (editable or not).
-    "xpwebapi",
+    "cockpitdecks_xpwebapi",
     "cockpitdecks_ld",
     "cockpitdecks_sd",
     "cockpitdecks_wm",
@@ -266,8 +264,8 @@ a = Analysis(
     ["launcher.py"],
     pathex=[
         os.path.abspath(os.getcwd()),
-        os.path.abspath(os.path.join(os.getcwd(), "..", "xplane-webapi")),
-        os.path.abspath(os.path.join(os.getcwd(), "..", "cockpitdecks_bx")),
+        os.path.abspath(os.path.join(os.getcwd(), "packages", "cockpitdecks_xpwebapi")),
+        os.path.abspath(os.path.join(os.getcwd(), "packages", "cockpitdecks_bx")),
     ],
     binaries=binaries,
     datas=datas,
