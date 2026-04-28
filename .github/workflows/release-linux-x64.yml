@@ -272,7 +272,7 @@ jobs:
       - name: Publish to GitHub release
         working-directory: cockpitdecks
         env:
-          GH_TOKEN: ${{ secrets.GH_PAT || github.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           ARTIFACT_BASENAME="cockpitdecks-linux-x64-${RELEASE_TAG}"
