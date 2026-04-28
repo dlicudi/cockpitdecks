@@ -210,6 +210,7 @@ jobs:
             "python-metar~=1.4.0" \
             "git+https://github.com/drwelby/py3rtree"
           python -m pip uninstall -y loupedeck streamdeck || true
+          python -m pip install --no-build-isolation --no-deps -e .
           python -m pip install --no-build-isolation --no-deps -e packages/cockpitdecks_xpwebapi
           python -m pip install --no-build-isolation --no-deps -e packages/cockpitdecks_bx
           python -m pip install --no-build-isolation --no-deps -e packages/cockpitdecks_ext
@@ -217,7 +218,6 @@ jobs:
           python -m pip install --no-build-isolation --no-deps -e packages/cockpitdecks_sd
           python -m pip install --no-build-isolation --no-deps -e packages/cockpitdecks_ld
           python -m pip install --no-build-isolation --no-deps -e packages/cockpitdecks_xp
-          python -m pip install --no-build-isolation --no-deps -e .
           python -m pip install --no-build-isolation --no-deps -e ../python-elgato-streamdeck
           python -m pip install --no-build-isolation --no-deps -e ../python-loupedeck-live
           python - <<'PY'

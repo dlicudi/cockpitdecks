@@ -146,6 +146,7 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel hatchling editables
           python -m pip install pyinstaller requests-cache
           python -m pip uninstall -y loupedeck streamdeck || true
+          python -m pip install --no-build-isolation -e .
           python -m pip install --no-build-isolation -e packages/cockpitdecks_xpwebapi
           python -m pip install --no-build-isolation -e packages/cockpitdecks_bx
           python -m pip install --no-build-isolation -e packages/cockpitdecks_ext
@@ -153,7 +154,6 @@ jobs:
           python -m pip install --no-build-isolation -e packages/cockpitdecks_sd
           python -m pip install --no-build-isolation -e packages/cockpitdecks_ld
           python -m pip install --no-build-isolation -e packages/cockpitdecks_xp
-          python -m pip install --no-build-isolation -e .
           python -m pip install --no-build-isolation -e ../python-elgato-streamdeck
           python -m pip uninstall -y loupedeck || true
           python -m pip install --no-build-isolation -e ../python-loupedeck-live
