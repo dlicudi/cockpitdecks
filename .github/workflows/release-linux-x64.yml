@@ -57,20 +57,6 @@ jobs:
           set +a
 
           required_vars=(
-            COCKPITDECKS_XP_REPOSITORY
-            COCKPITDECKS_XP_REF
-            COCKPITDECKS_LD_REPOSITORY
-            COCKPITDECKS_LD_REF
-            COCKPITDECKS_SD_REPOSITORY
-            COCKPITDECKS_SD_REF
-            COCKPITDECKS_WM_REPOSITORY
-            COCKPITDECKS_WM_REF
-            COCKPITDECKS_EXT_REPOSITORY
-            COCKPITDECKS_EXT_REF
-            COCKPITDECKS_BX_REPOSITORY
-            COCKPITDECKS_BX_REF
-            XPLANE_WEBAPI_REPOSITORY
-            XPLANE_WEBAPI_REF
             PYTHON_LOUPEDECK_LIVE_REPOSITORY
             PYTHON_LOUPEDECK_LIVE_REF
             PYTHON_ELGATO_STREAMDECK_REPOSITORY
@@ -97,13 +83,6 @@ jobs:
             echo
             echo "- release tag: \`${RELEASE_TAG}\`"
             echo "- runner architecture: \`$(uname -m)\`"
-            echo "- cockpitdecks_xp: \`${COCKPITDECKS_XP_REPOSITORY}@${COCKPITDECKS_XP_REF}\`"
-            echo "- cockpitdecks_ld: \`${COCKPITDECKS_LD_REPOSITORY}@${COCKPITDECKS_LD_REF}\`"
-            echo "- cockpitdecks_sd: \`${COCKPITDECKS_SD_REPOSITORY}@${COCKPITDECKS_SD_REF}\`"
-            echo "- cockpitdecks_wm: \`${COCKPITDECKS_WM_REPOSITORY}@${COCKPITDECKS_WM_REF}\`"
-            echo "- cockpitdecks_ext: \`${COCKPITDECKS_EXT_REPOSITORY}@${COCKPITDECKS_EXT_REF}\`"
-            echo "- cockpitdecks_bx: \`${COCKPITDECKS_BX_REPOSITORY}@${COCKPITDECKS_BX_REF}\`"
-            echo "- xplane-webapi: \`${XPLANE_WEBAPI_REPOSITORY}@${XPLANE_WEBAPI_REF}\`"
             echo "- python-loupedeck-live: \`${PYTHON_LOUPEDECK_LIVE_REPOSITORY}@${PYTHON_LOUPEDECK_LIVE_REF}\`"
             echo "- python-elgato-streamdeck: \`${PYTHON_ELGATO_STREAMDECK_REPOSITORY}@${PYTHON_ELGATO_STREAMDECK_REF}\`"
           } >> "${GITHUB_STEP_SUMMARY}"
@@ -126,71 +105,6 @@ jobs:
             echo "::error::Source version ${SOURCE_TAG} does not match release tag ${RELEASE_TAG}"
             exit 1
           fi
-
-      - name: Check cross-repo token configuration
-        env:
-          GH_PAT: ${{ secrets.GH_PAT }}
-        run: |
-          set -euo pipefail
-          if [[ -z "${GH_PAT}" ]]; then
-            echo "::warning::GH_PAT is not configured. External checkout steps will only work if the dependent repositories are public and accessible with GITHUB_TOKEN."
-          fi
-
-      - name: Checkout cockpitdecks_xp
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ env.COCKPITDECKS_XP_REPOSITORY }}
-          ref: ${{ env.COCKPITDECKS_XP_REF }}
-          path: cockpitdecks_xp
-          token: ${{ secrets.GH_PAT || github.token }}
-
-      - name: Checkout cockpitdecks_ld
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ env.COCKPITDECKS_LD_REPOSITORY }}
-          ref: ${{ env.COCKPITDECKS_LD_REF }}
-          path: cockpitdecks_ld
-          token: ${{ secrets.GH_PAT || github.token }}
-
-      - name: Checkout cockpitdecks_sd
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ env.COCKPITDECKS_SD_REPOSITORY }}
-          ref: ${{ env.COCKPITDECKS_SD_REF }}
-          path: cockpitdecks_sd
-          token: ${{ secrets.GH_PAT || github.token }}
-
-      - name: Checkout cockpitdecks_wm
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ env.COCKPITDECKS_WM_REPOSITORY }}
-          ref: ${{ env.COCKPITDECKS_WM_REF }}
-          path: cockpitdecks_wm
-          token: ${{ secrets.GH_PAT || github.token }}
-
-      - name: Checkout cockpitdecks_ext
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ env.COCKPITDECKS_EXT_REPOSITORY }}
-          ref: ${{ env.COCKPITDECKS_EXT_REF }}
-          path: cockpitdecks_ext
-          token: ${{ secrets.GH_PAT || github.token }}
-
-      - name: Checkout cockpitdecks_bx
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ env.COCKPITDECKS_BX_REPOSITORY }}
-          ref: ${{ env.COCKPITDECKS_BX_REF }}
-          path: cockpitdecks_bx
-          token: ${{ secrets.GH_PAT || github.token }}
-
-      - name: Checkout xplane-webapi
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ env.XPLANE_WEBAPI_REPOSITORY }}
-          ref: ${{ env.XPLANE_WEBAPI_REF }}
-          path: xplane-webapi
-          token: ${{ secrets.GH_PAT || github.token }}
 
       - name: Checkout python-loupedeck-live
         uses: actions/checkout@v4
@@ -217,7 +131,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('cockpitdecks/pyproject.toml', 'cockpitdecks/cockpitdecks.spec', 'cockpitdecks/pyinstaller_runtime_hook.py', 'cockpitdecks/.github/cockpitdecks-release-deps.env', 'cockpitdecks_xp/pyproject.toml', 'cockpitdecks_ld/pyproject.toml', 'cockpitdecks_sd/pyproject.toml', 'cockpitdecks_wm/pyproject.toml', 'cockpitdecks_ext/pyproject.toml', 'cockpitdecks_bx/pyproject.toml', 'xplane-webapi/pyproject.toml', 'python-loupedeck-live/pyproject.toml', 'python-elgato-streamdeck/setup.py', 'python-elgato-streamdeck/src/StreamDeck/Transport/LibUSBHIDAPI.py') }}
+          key: ${{ runner.os }}-pip-${{ hashFiles('cockpitdecks/pyproject.toml', 'cockpitdecks/cockpitdecks.spec', 'cockpitdecks/pyinstaller_runtime_hook.py', 'cockpitdecks/.github/cockpitdecks-release-deps.env', 'cockpitdecks/packages/cockpitdecks_xp/pyproject.toml', 'cockpitdecks/packages/cockpitdecks_ld/pyproject.toml', 'cockpitdecks/packages/cockpitdecks_sd/pyproject.toml', 'cockpitdecks/packages/cockpitdecks_wm/pyproject.toml', 'cockpitdecks/packages/cockpitdecks_ext/pyproject.toml', 'cockpitdecks/packages/cockpitdecks_bx/pyproject.toml', 'cockpitdecks/packages/cockpitdecks_xpwebapi/pyproject.toml', 'python-loupedeck-live/pyproject.toml', 'python-elgato-streamdeck/setup.py', 'python-elgato-streamdeck/src/StreamDeck/Transport/LibUSBHIDAPI.py') }}
           restore-keys: |
             ${{ runner.os }}-pip-
 
@@ -232,13 +146,13 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel hatchling editables
           python -m pip install pyinstaller requests-cache
           python -m pip uninstall -y loupedeck streamdeck || true
-          python -m pip install --no-build-isolation -e ../xplane-webapi
-          python -m pip install --no-build-isolation -e ../cockpitdecks_bx
-          python -m pip install --no-build-isolation -e ../cockpitdecks_ext
-          python -m pip install --no-build-isolation -e ../cockpitdecks_wm
-          python -m pip install --no-build-isolation -e ../cockpitdecks_sd
-          python -m pip install --no-build-isolation -e ../cockpitdecks_ld
-          python -m pip install --no-build-isolation -e ../cockpitdecks_xp
+          python -m pip install --no-build-isolation -e packages/cockpitdecks_xpwebapi
+          python -m pip install --no-build-isolation -e packages/cockpitdecks_bx
+          python -m pip install --no-build-isolation -e packages/cockpitdecks_ext
+          python -m pip install --no-build-isolation -e packages/cockpitdecks_wm
+          python -m pip install --no-build-isolation -e packages/cockpitdecks_sd
+          python -m pip install --no-build-isolation -e packages/cockpitdecks_ld
+          python -m pip install --no-build-isolation -e packages/cockpitdecks_xp
           python -m pip install --no-build-isolation -e .
           python -m pip install --no-build-isolation -e ../python-elgato-streamdeck
           python -m pip uninstall -y loupedeck || true
@@ -283,13 +197,13 @@ jobs:
 
           repo_map = {
               "cockpitdecks": {"path": os.getcwd(), "distribution": "cockpitdecks"},
-              "cockpitdecks_xp": {"path": os.path.join(workspace, "cockpitdecks_xp"), "distribution": "cockpitdecks_xp"},
-              "cockpitdecks_ld": {"path": os.path.join(workspace, "cockpitdecks_ld"), "distribution": "cockpitdecks_ld"},
-              "cockpitdecks_sd": {"path": os.path.join(workspace, "cockpitdecks_sd"), "distribution": "cockpitdecks_sd"},
-              "cockpitdecks_wm": {"path": os.path.join(workspace, "cockpitdecks_wm"), "distribution": "cockpitdecks_wm"},
-              "cockpitdecks_ext": {"path": os.path.join(workspace, "cockpitdecks_ext"), "distribution": "cockpitdecks_ext"},
-              "cockpitdecks_bx": {"path": os.path.join(workspace, "cockpitdecks_bx"), "distribution": "cockpitdecks_bx"},
-              "xplane-webapi": {"path": os.path.join(workspace, "xplane-webapi"), "distribution": "xpwebapi"},
+              "cockpitdecks_xp": {"path": os.path.join(os.getcwd(), "packages", "cockpitdecks_xp"), "distribution": "cockpitdecks_xp"},
+              "cockpitdecks_ld": {"path": os.path.join(os.getcwd(), "packages", "cockpitdecks_ld"), "distribution": "cockpitdecks_ld"},
+              "cockpitdecks_sd": {"path": os.path.join(os.getcwd(), "packages", "cockpitdecks_sd"), "distribution": "cockpitdecks_sd"},
+              "cockpitdecks_wm": {"path": os.path.join(os.getcwd(), "packages", "cockpitdecks_wm"), "distribution": "cockpitdecks_wm"},
+              "cockpitdecks_ext": {"path": os.path.join(os.getcwd(), "packages", "cockpitdecks_ext"), "distribution": "cockpitdecks_ext"},
+              "cockpitdecks_bx": {"path": os.path.join(os.getcwd(), "packages", "cockpitdecks_bx"), "distribution": "cockpitdecks_bx"},
+              "cockpitdecks_xpwebapi": {"path": os.path.join(os.getcwd(), "packages", "cockpitdecks_xpwebapi"), "distribution": "cockpitdecks_xpwebapi"},
               "python-loupedeck-live": {"path": os.path.join(workspace, "python-loupedeck-live"), "distribution": "loupedeck"},
               "python-elgato-streamdeck": {"path": os.path.join(workspace, "python-elgato-streamdeck"), "distribution": "streamdeck"},
           }
