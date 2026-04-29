@@ -297,11 +297,15 @@ jobs:
                 echo "**Full changelog**: https://github.com/${GITHUB_REPOSITORY}/compare/${PREV_TAG}...${RELEASE_TAG}"
               fi
             } > release-notes.md
-            gh release create "${RELEASE_TAG}" \
-              --title "${RELEASE_TAG}" \
-              --notes-file release-notes.md \
-              --target "${{ github.sha }}" \
-              "${ARTIFACT_BASENAME}.tar.gz" \
-              "${ARTIFACT_BASENAME}.tar.gz.sha256" \
-              build-metadata.json
+            if ! gh release create "${RELEASE_TAG}" \
+                --title "${RELEASE_TAG}" \
+                --notes-file release-notes.md \
+                --target "${{ github.sha }}" \
+                "${ARTIFACT_BASENAME}.tar.gz" \
+                "${ARTIFACT_BASENAME}.tar.gz.sha256" \
+                build-metadata.json 2>/dev/null; then
+              gh release upload "${RELEASE_TAG}" \
+                "${ARTIFACT_BASENAME}.tar.gz" \
+                "${ARTIFACT_BASENAME}.tar.gz.sha256"
+            fi
           fi

@@ -414,11 +414,17 @@ jobs:
               "${ARTIFACT_BASENAME}.zip.sha256" \
               build-metadata.json
           else
-            gh release create "${RELEASE_TAG}" \
-              --title "${RELEASE_TAG}" \
-              --notes-file release-notes-windows.md \
-              --target "${{ github.sha }}" \
-              "${ARTIFACT_BASENAME}.zip" \
-              "${ARTIFACT_BASENAME}.zip.sha256" \
-              build-metadata.json
+            if ! gh release create "${RELEASE_TAG}" \
+                --title "${RELEASE_TAG}" \
+                --notes-file release-notes-windows.md \
+                --target "${{ github.sha }}" \
+                "${ARTIFACT_BASENAME}.zip" \
+                "${ARTIFACT_BASENAME}.zip.sha256" \
+                build-metadata.json 2>/dev/null; then
+              gh release upload "${RELEASE_TAG}" \
+                --clobber \
+                "${ARTIFACT_BASENAME}.zip" \
+                "${ARTIFACT_BASENAME}.zip.sha256" \
+                build-metadata.json
+            fi
           fi
