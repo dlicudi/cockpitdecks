@@ -403,7 +403,7 @@ jobs:
       - name: Publish GitHub release asset
         working-directory: cockpitdecks
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.GH_PAT || github.token }}
         run: |
           set -euo pipefail
           ARTIFACT_BASENAME="cockpitdecks-windows-x64-${RELEASE_TAG}"
