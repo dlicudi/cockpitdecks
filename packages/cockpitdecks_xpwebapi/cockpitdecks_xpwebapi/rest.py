@@ -352,17 +352,27 @@ class XPRestAPI(API):
             if type(d) is Dataref:
                 d._cached_meta = None
                 d._meta_failed = False
+                d._monitored = 0
             elif type(d) is list:
                 for di in d:
                     di._cached_meta = None
                     di._meta_failed = False
+                    di._monitored = 0
         self._dataref_by_id.clear()
         logger.info("cache invalidated")
+
+    def dataref_equiv(self, ident: int) -> str:
+        """Return a display name for a dataref id, even while caches are unavailable."""
+        return self.all_datarefs.equiv(ident=ident) if self.all_datarefs is not None else f"no dataref cache for {ident}"
+
+    def command_equiv(self, ident: int) -> str:
+        """Return a display name for a command id, even while caches are unavailable."""
+        return self.all_commands.equiv(ident=ident) if self.all_commands is not None else f"no command cache for {ident}"
 
     def rebuild_dataref_ids(self):
         """Rebuild dataref idenfier index"""
         if len(self._dataref_by_id) > 0:
-            if self.all_datarefs.has_data:
+            if self.all_datarefs is not None and self.all_datarefs.has_data:
                 newdict = dict()
                 for d in self._dataref_by_id.values():
                     if type(d) is Dataref:

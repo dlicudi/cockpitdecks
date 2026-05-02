@@ -44,14 +44,12 @@ body {
   height: 100vh;
   height: 100dvh;
   padding:
-    max(12px, env(safe-area-inset-top))
-    max(12px, env(safe-area-inset-right))
-    max(12px, env(safe-area-inset-bottom))
-    max(12px, env(safe-area-inset-left));
+    env(safe-area-inset-top, 0px)
+    env(safe-area-inset-right, 0px)
+    env(safe-area-inset-bottom, 0px)
+    env(safe-area-inset-left, 0px);
   box-sizing: border-box;
-  background:
-    radial-gradient(circle at top, rgba(255,255,255,0.2), transparent 45%),
-    linear-gradient(180deg, rgba(11, 18, 32, 0.08), rgba(11, 18, 32, 0.22));
+  background-color: var(--deck-background-color);
 }
 
 #deck-shell {

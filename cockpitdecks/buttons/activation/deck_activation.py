@@ -1433,7 +1433,6 @@ class Slider(Activation):  # Cursor?
         """
         a = [
             f"This slider produces a value between [{self.value_min}, {self.value_max}].",
-            f"The raw value from slider is modified by formula {self.button.formula}.",
         ]
         if self._set_sim_data is not None:
             a.append(f"The value after modification by the formula is written in dataref {self._set_sim_data.name}.")

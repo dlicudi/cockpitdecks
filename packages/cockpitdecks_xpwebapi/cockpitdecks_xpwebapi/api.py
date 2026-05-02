@@ -76,10 +76,17 @@ class MetaFetchQueue:
         while True:
             obj = self.q.get()
             if obj is None: break
-            try:
-                ret = obj.api.get_rest_meta(obj)
-            except Exception:
-                ret = None
+            # Bulk cache may have been loaded after this request was queued — check it
+            # before making an individual REST call, which can fail transiently on reconnect.
+            ret = None
+            bulk_cache = obj.api.all_commands if isinstance(obj, Command) else obj.api.all_datarefs
+            if bulk_cache is not None:
+                ret = bulk_cache.get(obj.path)
+            if ret is None:
+                try:
+                    ret = obj.api.get_rest_meta(obj)
+                except Exception:
+                    ret = None
             if ret is not None:
                 obj._cached_meta = ret
                 obj._meta_fetching = False

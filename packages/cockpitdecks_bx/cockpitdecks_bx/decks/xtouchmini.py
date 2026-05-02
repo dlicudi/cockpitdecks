@@ -2,9 +2,6 @@
 #
 import logging
 
-from XTouchMini.Devices.xtouchmini import LED_MODE, MAKIE_MAPPING
-from XTouchMini import DeviceManager
-
 from cockpitdecks import DECK_KW, DECK_ACTIONS, DEFAULT_PAGE_NAME
 from cockpitdecks.deck import Deck
 from cockpitdecks.page import Page
@@ -18,6 +15,20 @@ logger = logging.getLogger(__name__)
 # Warning, the logger in package XTouchMini is called "XTouchMini".
 
 
+# Defers XTouchMini/mido/rtmidi import to avoid CoreMIDI initialisation at startup.
+# rtmidi initialises CoreMIDI when the C extension loads; on a broken MIDI server
+# this causes std::terminate (uncatchable), so we must not import at module level.
+class _XTouchDeviceManager:
+    def enumerate(self):
+        from XTouchMini import DeviceManager
+        return DeviceManager().enumerate()
+
+    @staticmethod
+    def list():
+        from XTouchMini import DeviceManager
+        return DeviceManager.list()
+
+
 class XTouchMini(Deck):
     """
     Loads the configuration of a X-Touch Mini.
@@ -26,7 +37,7 @@ class XTouchMini(Deck):
     DECK_NAME = "xtouchmini"
     DRIVER_NAME = "xtouchmini"
     MIN_DRIVER_VERSION = "1.3.6"
-    DEVICE_MANAGER = DeviceManager
+    DEVICE_MANAGER = _XTouchDeviceManager
 
     def __init__(self, name: str, config: dict, cockpit: "Cockpit", device=None):
         Deck.__init__(self, name=name, config=config, cockpit=cockpit, device=device)
@@ -78,6 +89,7 @@ class XTouchMini(Deck):
         bdef = self.deck_type.filter({DECK_KW.ACTION.value: DECK_ACTIONS.CURSOR.value})
         cursor = bdef[0].get(DECK_KW.NAME.value)
 
+        from XTouchMini.Devices.xtouchmini import MAKIE_MAPPING
         KEY_MAP = {v: k for k, v in MAKIE_MAPPING.items()}
 
         key1 = None
@@ -132,8 +144,11 @@ class XTouchMini(Deck):
                 key = key.upper()
             self.device.set_key(key=key, on=on, blink=blink)
 
-    def _set_control(self, key: int, value: int, mode: LED_MODE = LED_MODE.SINGLE):
+    def _set_control(self, key: int, value: int, mode=None):
         if self.device is not None:
+            if mode is None:
+                from XTouchMini.Devices.xtouchmini import LED_MODE
+                mode = LED_MODE.SINGLE
             self.device.set_control(key=key, value=value, mode=mode)
 
     def render(self, button: Button):  # idx: int, image: str, label: str = None):

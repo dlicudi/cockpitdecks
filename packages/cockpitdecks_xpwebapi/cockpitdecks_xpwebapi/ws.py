@@ -298,7 +298,7 @@ class XPWebsocketAPI(XPRestAPI):
         """
         meta = self.get_dataref_meta_by_name(KEEPALIVE_DATAREF_PATH)
         if meta is None:
-            logger.debug(f"keepalive dataref {KEEPALIVE_DATAREF_PATH} not in database; stall detection may produce false positives")
+            logger.warning(f"keepalive dataref {KEEPALIVE_DATAREF_PATH} not in database; stall detection disabled")
             return
         self._keepalive_ident = meta.ident
         self.send(
@@ -373,17 +373,20 @@ class XPWebsocketAPI(XPRestAPI):
                         self.dynamic_timeout = self.RECONNECT_TIMEOUT
                         logger.info(f"capabilities: {self.capabilities}")
                         if self.xp_version is not None:  # see https://packaging.pypa.io/en/stable/version.html
-                            curr = Version(self.xp_version).base_version  # note Version() uniformly converts "12.2.0-r1" to "12.2.0.post1"
-                            xpmin = Version(XP_MIN_VERSION_STR).base_version
-                            xpmax = Version(XP_MAX_VERSION_STR).base_version
+                            curr = Version(self.xp_version)  # note Version() uniformly converts "12.2.0-r1" to "12.2.0.post1"
+                            xpmin = Version(XP_MIN_VERSION_STR)
+                            xpmax = Version(XP_MAX_VERSION_STR)
+                            curr_mm = (curr.major, curr.minor)
+                            xpmin_mm = (xpmin.major, xpmin.minor)
+                            xpmax_mm = (xpmax.major, xpmax.minor)
                             if curr < xpmin:
-                                logger.warning(f"X-Plane version {curr} ({self.xp_version}) detected, minimal version is {xpmin}")
+                                logger.warning(f"X-Plane version {curr.base_version} ({self.xp_version}) detected, minimal version is {xpmin.base_version}")
                                 logger.warning("Some features may not work properly")
-                            elif curr > xpmax:
-                                logger.warning(f"X-Plane version {curr} ({self.xp_version}) detected, maximal version is {xpmax}")
-                                logger.warning(f"Some features may not work properly (not tested against X-Plane version after {xpmax})")
+                            elif curr_mm > xpmax_mm:
+                                logger.warning(f"X-Plane version {curr.base_version} ({self.xp_version}) detected, maximal version is {xpmax.base_version}")
+                                logger.warning(f"Some features may not work properly (not tested against X-Plane version after {xpmax.base_version})")
                             else:
-                                logger.info(f"X-Plane version requirements {xpmin}<= {curr} <={xpmax} satisfied")
+                                logger.info(f"X-Plane version requirements {xpmin.base_version} <= {curr.base_version} <= {xpmax.base_version}.x satisfied")
                         logger.debug("..connected, starting websocket listener..")
                         self.start()  # calls local start to start websocket listener
                         logger.info("..websocket listener started..")
@@ -417,7 +420,7 @@ class XPWebsocketAPI(XPRestAPI):
                     logger.warning("websocket listener not running; resetting websocket connection")
                     self.disconnect_websocket(silent=True)
                     continue
-                if len(self._dataref_by_id) > 0 and self._last_ws_activity_monotonic is not None:
+                if len(self._dataref_by_id) > 0 and self._last_ws_activity_monotonic is not None and self._keepalive_ident is not None:
                     stalled_for = time.monotonic() - self._last_ws_activity_monotonic
                     if stalled_for >= WS_STALL_TIMEOUT:
                         self._ws_stall_count += 1
@@ -815,7 +818,7 @@ class XPWebsocketAPI(XPRestAPI):
                                 webapi_logger.info(f"CMD : {meta.name}={value}")
                                 self.execute_callbacks(CALLBACK_TYPE.ON_COMMAND_ACTIVE, command=meta.name, active=value)
                             else:
-                                logger.warning(f"no command for id={self.all_commands.equiv(ident=int(ident))}")
+                                logger.warning(f"no command for id={self.command_equiv(ident=int(ident))}")
                     #
                     #
                     elif resp_type == WS_RESPONSE_TYPE.DATAREF_UPDATE.value:
@@ -846,7 +849,7 @@ class XPWebsocketAPI(XPRestAPI):
                             if dataref is None:
                                 if ident != self._keepalive_ident:
                                     logger.debug(
-                                        f"no dataref for id={self.all_datarefs.equiv(ident=int(ident))} (this may be a previously requested dataref arriving late..., safely ignore)"
+                                        f"no dataref for id={self.dataref_equiv(ident=int(ident))} (this may be a previously requested dataref arriving late..., safely ignore)"
                                     )
                                 continue
 
@@ -855,11 +858,11 @@ class XPWebsocketAPI(XPRestAPI):
                                 #
                                 # 1. One or more values from a dataref array (but not all values)
                                 if type(value) is not list:
-                                    logger.warning(f"dataref array {self.all_datarefs.equiv(ident=ident)} value is not a list ({value}, {type(value)})")
+                                    logger.warning(f"dataref array {self.dataref_equiv(ident=ident)} value is not a list ({value}, {type(value)})")
                                     continue
                                 meta = dataref[0].meta
                                 if meta is None:
-                                    logger.debug(f"dataref array {self.all_datarefs.equiv(ident=ident)} meta data not found (yet), using path fallback")
+                                    logger.debug(f"dataref array {self.dataref_equiv(ident=ident)} meta data not found (yet), using path fallback")
                                 name = meta.name if meta is not None else dataref[0].path
                                 current_indices = self._requested_indices_by_id.get(ident, [])
                                 if len(value) == len(current_indices):
@@ -885,9 +888,9 @@ class XPWebsocketAPI(XPRestAPI):
                                             self.inc("-"+d1)
                                 else:
                                     logger.warning(
-                                        f"dataref array {self.all_datarefs.equiv(ident=ident)}: size mismatch ({len(value)} vs {len(current_indices)}), and not a full prefix"
+                                        f"dataref array {self.dataref_equiv(ident=ident)}: size mismatch ({len(value)} vs {len(current_indices)}), and not a full prefix"
                                     )
-                                    logger.warning(f"dataref array {self.all_datarefs.equiv(ident=ident)}: value: {value}, indices: {current_indices})")
+                                    logger.warning(f"dataref array {self.dataref_equiv(ident=ident)}: value: {value}, indices: {current_indices})")
                                     # Since we don't know the indices for this partial data array, we skip processing to avoid misrouting
                                     continue
                                     # print(f"{d1}={v1}")
@@ -1126,7 +1129,7 @@ class XPWebsocketAPI(XPRestAPI):
                         del self._dataref_by_id[i]
                         to_unsubscribe[i] = d
                 else:
-                    logger.warning(f"no dataref for id={self.all_datarefs.equiv(ident=i)}")
+                    logger.warning(f"no dataref for id={self.dataref_equiv(ident=i)}")
             
             if len(to_unsubscribe) > 0:
                 ret = self.register_bulk_dataref_value_event(datarefs=to_unsubscribe, on=False)

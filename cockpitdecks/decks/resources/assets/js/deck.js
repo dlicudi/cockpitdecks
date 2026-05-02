@@ -537,11 +537,12 @@ class LiveDeck {
 
         if (!horiz) {
             // ── Vertical ──────────────────────────────────────────────────────
-            const margin = Math.round(w * 0.18);
-            const pad    = Math.round(h * 0.02);
+            const margin      = Math.round(w * 0.18);
+            const pad         = Math.round(h * 0.02);
+            const labelGapFrac = meta.label_gap_frac || 0;
             const tx0 = x + margin;
             const tx1 = x + w - margin;
-            const ty0 = y + pad;
+            const ty0 = y + pad + Math.round(h * labelGapFrac);
             const ty1 = y + h - pad;
             const trackH = ty1 - ty0;
             const fillH  = Math.round(trackH * frac);

@@ -100,12 +100,14 @@ class SliderIcon(DrawBase):
 
     def get_slider_meta(self) -> dict:
         """Return rendering metadata for client-side slider drawing."""
+        label_gap = self.label_font_size + 6 if self.label else 0
         return {
-            "fill":        _to_css(self.fill_color),
-            "track":       _to_css(self.track_color),
-            "orientation": self.orientation,
-            "fraction":    self._fraction(),
-            "label":       self.label,
+            "fill":           _to_css(self.fill_color),
+            "track":          _to_css(self.track_color),
+            "orientation":    self.orientation,
+            "fraction":       self._fraction(),
+            "label":          self.label,
+            "label_gap_frac": label_gap / ICON_SIZE,
         }
 
     # ──────────────────────────────────────────────────────────────────────────
@@ -133,20 +135,22 @@ class SliderIcon(DrawBase):
         pad    = int(S * 0.02)
         r      = TRACK_RADIUS
 
+        label_gap = self.label_font_size + 6 if self.label else 0
+
         tx0 = margin
         tx1 = S - margin
-        ty0 = pad
+        ty0 = pad + label_gap
         ty1 = S - pad
 
         # Track background only — no fill
         draw.rounded_rectangle([tx0, ty0, tx1, ty1], radius=r, fill=self.track_color)
 
-        # Label at bottom inside track
+        # Label above the track so it is never covered by the fill
         if self.label:
             try:
                 font_l = self.get_font(None, self.label_font_size)
                 draw.text(
-                    (S // 2, ty1 - 4),
+                    (S // 2, ty0 - 4),
                     self.label,
                     font=font_l,
                     fill=LABEL_COLOR,

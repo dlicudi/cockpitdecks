@@ -367,9 +367,10 @@ class VirtualDeck(DeckWithIcons):
                 pass
         activation = getattr(button, "_activation", None)
         swipe_mode = isinstance(activation, (SwipeActivation, SweepActivation))
-        swipe_stops = activation.num_stops if swipe_mode else None
-        swipe_current_stop = activation.get_activation_value() if swipe_mode else None
-        scroll_mode = isinstance(activation, SweepActivation)
+        sweep_mode = isinstance(activation, SweepActivation)
+        swipe_stops = activation.num_stops if sweep_mode else None
+        swipe_current_stop = activation.get_activation_value() if sweep_mode else None
+        scroll_mode = sweep_mode
         self.set_key_icon(button.index, image, span=span, slider_meta=slider_meta, swipe_mode=swipe_mode, swipe_stops=swipe_stops, swipe_current_stop=swipe_current_stop, scroll_mode=scroll_mode)
 
     def _set_hardware_image(self, button: Button):  # idx: int, image: str, label: str = None):

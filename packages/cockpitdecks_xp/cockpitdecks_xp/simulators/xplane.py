@@ -991,6 +991,15 @@ class XPlane(XPWebsocketAPI, Simulator, SimulatorVariableListener):
         if not self.connected:
             return
         self.register_bulk_dataref_value_event(datarefs=self._dataref_by_id, on=False)
+        # Reset per-dataref monitor counters so add_simulator_variables_to_monitor
+        # re-subscribes everything on the new WebSocket connection rather than
+        # treating still-counted datarefs as already subscribed.
+        for d in self._dataref_by_id.values():
+            if type(d) is list:
+                for d1 in d:
+                    d1._monitored = 0
+            else:
+                d._monitored = 0
         self._dataref_by_id = {}
         super().clean_simulator_variable_to_monitor()
         logger.debug("done")
@@ -1126,7 +1135,7 @@ class XPlane(XPWebsocketAPI, Simulator, SimulatorVariableListener):
                         del self._dataref_by_id[i]
                         to_unsubscribe[i] = d
                 else:
-                    logger.debug(f"no dataref for id={self.all_datarefs.equiv(ident=i)}")
+                    logger.debug(f"no dataref for id={self.dataref_equiv(ident=i)}")
             
             if len(to_unsubscribe) > 0:
                 self.register_bulk_dataref_value_event(datarefs=to_unsubscribe, on=False)
@@ -1559,6 +1568,22 @@ class XPlane(XPWebsocketAPI, Simulator, SimulatorVariableListener):
             logger.info("aircraft loaded")
 
         if self.is_aircraft_loaded:
+            # Reload caches now that aircraft plugins have registered their datarefs.
+            # Some datarefs (aircraft instruments etc.) are absent from /datarefs until
+            # the aircraft finishes loading, so earlier meta-fetch attempts may have set
+            # _meta_failed=True. Refresh the cache and unblock those datarefs so that
+            # reload_pages() can resolve and subscribe them.
+            self.reload_caches(force=True)
+            if self.all_datarefs is not None:
+                unblocked = 0
+                for d in self.cockpit.variable_database.database.values():
+                    if isinstance(d, Dataref) and d._meta_failed:
+                        if self.all_datarefs.get(d.path) is not None:
+                            d._meta_failed = False
+                            d._cached_meta = None
+                            unblocked += 1
+                if unblocked:
+                    logger.info(f"unblocked {unblocked} datarefs that failed meta-fetch before aircraft loaded")
             aircraft_path = self._aircraft_path.value
             if isinstance(aircraft_path, (bytes, bytearray)):
                 aircraft_path = aircraft_path.decode()
