@@ -71,7 +71,7 @@ class Button(VariableListener, SimulatorVariableValueProvider, StateVariableValu
         if self._definition is None:
             logger.warning(f"button {self.name}: no definition")
 
-        self.name = config.get(CONFIG_KW.NAME.value, str(self.index))
+        self.name = str(config.get(CONFIG_KW.NAME.value, self.index))
         self.num_index = None
         if type(self.index) is str:
             idxnum = re.findall("\\d+(?:\\.\\d+)?$", self.index)  # just the numbers of a button index name knob3 -> 3.
