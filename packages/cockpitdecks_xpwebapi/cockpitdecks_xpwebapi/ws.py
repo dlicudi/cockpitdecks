@@ -508,7 +508,23 @@ class XPWebsocketAPI(XPRestAPI):
         payload[REST_KW.REQID.value] = req_id
         self._requests[req_id] = Request(r_id=req_id, body=payload, ts=now())
         self.inc("send")
-        self.ws.send(json.dumps(payload))
+        try:
+            self.ws.send(json.dumps(payload))
+        except (BrokenPipeError, ConnectionClosed, OSError) as e:
+            # Socket died between the connected check and send (half-closed by peer,
+            # mid-stall reset, etc.). Tear down so the connection monitor reconnects,
+            # and report a clean failure instead of letting the exception break callers
+            # like change_page. Stack-level retry isn't safe — the new socket needs
+            # fresh subscriptions, not a replay of this payload.
+            logger.warning(f"send failed ({type(e).__name__}: {e}); marking websocket disconnected")
+            self.inc("send_broken_pipe")
+            try:
+                self.disconnect_websocket(silent=True)
+            except Exception:
+                # close() on an already-broken socket can re-raise; null ws so the
+                # connection monitor still sees disconnected state.
+                self.ws = None
+            return False
         webapi_logger.info(f">>SENT {payload}")
         if len(mapping) > 0:
             maps = [f"{k}={v}" for k, v in mapping.items()]
